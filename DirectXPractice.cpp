@@ -110,9 +110,6 @@ private:
 
 	std::array<const CD3DX12_STATIC_SAMPLER_DESC, 6> GetStaticSamplers();
 
-    float GetHillsHeight(float x, float z)const;
-    XMFLOAT3 GetHillsNormal(float x, float z)const;
-
 private:
 
     std::vector<std::unique_ptr<FrameResource>> mFrameResources;
@@ -154,8 +151,8 @@ private:
     float mPhi = XM_PIDIV2 - 0.1f;
     float mRadius = 50.0f;
 
-	size_t map_w = 0.f;
-	size_t map_h = 0.f;
+	size_t map_w = 0;
+	size_t map_h = 0;
 
 	size_t mCursorProvince = 1;
 
@@ -215,7 +212,7 @@ bool MyApp::Initialize()
     BuildLandGeometry();
 	mWaves = std::make_unique<Waves>(map_h, map_w, 1.0f, 0.03f, 4.0f, 0.2f);
     BuildWavesGeometry();
-	//BuildBoxGeometry();	
+	BuildBoxGeometry();	
 	BuildMaterials();
     BuildRenderItems();
     BuildFrameResources();
@@ -375,7 +372,7 @@ void MyApp::OnMouseMove(WPARAM btnState, int x, int y)
         mRadius += dx - dy;
 
         // Restrict the radius.
-        mRadius = MathHelper::Clamp(mRadius, 5.0f, 150.0f);
+        mRadius = MathHelper::Clamp(mRadius, 10.0f, 240.0f);
     }
 
     mLastMousePos.x = x;
@@ -528,43 +525,44 @@ void MyApp::UpdateMainPassCB(const GameTimer& gt)
 
 	//mMainPassCB.gProv[0] = { 0.0f, 0.0f, 0.0f, 0.0f };
 
-	for (size_t prov = 1; prov < 19; ++prov)
-	{
+	//for (size_t prov = 1; prov < 19; ++prov)
+	/*{
 		switch (prov)
 		{
-		case 1:
-		case 11:
-		case 12:
+		case 4:
+		case 6:
+		case 7:
 			mMainPassCB.gProv[prov] = { 1.0f, 1.0f, 0.0f, 1.0f };
 			break;
-		case 6:
-		case 10:
+		case 3:
 			mMainPassCB.gProv[prov] = { 1.0f, 0.4f, 0.4f, 1.0f };
 			break;
-		case 4:
+		case 2:
 		case 5:
 			mMainPassCB.gProv[prov] = { 0.4f, 0.8f, 1.0f, 1.0f };
 			break;
-		case 7:
 		case 8:
 		case 9:
+		case 10:
+		case 11:
+		case 12:
 		case 13:
 		case 14:
 		case 15:
 		case 16:
 		case 17:
 		case 18:
-		case 3:
 			mMainPassCB.gProv[prov] = { 1.0f, 0.0f, 0.0f, 1.0f };
 			break;
 
-		case 2:
+		case 1:
 			mMainPassCB.gProv[prov] = { 0.4f, 0.5f, 1.0f, 1.0f };
 			break;
 		}
 	}
+*/
 
-	/*mMainPassCB.gProv[1] = { 1.0f, 0.0f, 0.0f, 1.0f };
+	mMainPassCB.gProv[1] = { 1.0f, 0.0f, 0.0f, 1.0f };
 	mMainPassCB.gProv[2] = { 0.0f, 1.0f, 0.0f, 1.0f };
 	mMainPassCB.gProv[3] = { 0.0f, 0.0f, 1.0f, 1.0f };
 	mMainPassCB.gProv[4] = { 1.0f, 1.0f, 0.0f, 1.0f };
@@ -582,12 +580,12 @@ void MyApp::UpdateMainPassCB(const GameTimer& gt)
 	mMainPassCB.gProv[15] = { 0.0f, 0.1f, 0.5f, 1.0f };
 	mMainPassCB.gProv[16] = { 0.5f, 0.0f, 0.0f, 1.0f };
 	mMainPassCB.gProv[17] = { 0.5f, 0.0f, 0.5f, 1.0f };
-	mMainPassCB.gProv[18] = { 0.5f, 0.0f, 1.0f, 1.0f };*/
+	mMainPassCB.gProv[18] = { 0.5f, 0.0f, 1.0f, 1.0f };
 	
 	mMainPassCB.Lights[0].Strength = { MathHelper::Clamp(2.f - powf(time / 4, 2), 0.f, 1.f), MathHelper::Clamp(1.5f - powf(time / 4, 2), 0.f, 1.f), MathHelper::Clamp(1.f - powf(time / 4, 2), 0.f, 1.f) };
 
 	mMainPassCB.Lights[1].Direction = { 0.f, -0.57735f, 0.57735f };
-	mMainPassCB.Lights[1].Strength = { 0.4f, 0.6f, 0.8f };
+	mMainPassCB.Lights[1].Strength = { 0.05f, 0.1f, 0.9f };
 	//mMainPassCB.Lights[2].Direction = { 0.0f, -0.707f, -0.707f };
 	//mMainPassCB.Lights[2].Strength = { 0.15f, 0.15f, 0.15f };
 
@@ -639,7 +637,7 @@ void MyApp::LoadTextures()
 
 	auto fenceTex = std::make_unique<Texture>();
 	fenceTex->Name = "fenceTex";
-	fenceTex->Filename = L"Textures/WireFence.dds";
+	fenceTex->Filename = L"Textures/stone.dds";
 	ThrowIfFailed(DirectX::CreateDDSTextureFromFile12(md3dDevice.Get(),
 		mCommandList.Get(), fenceTex->Filename.c_str(),
 		fenceTex->Resource, fenceTex->UploadHeap));
@@ -772,12 +770,6 @@ int rgb2dex(int r, int g, int b)
 
 void MyApp::BuildLandGeometry()
 {
-    //
-    // Extract the vertex elements we are interested and apply the height function to
-    // each vertex.  In addition, color the vertices based on their height so we have
-    // sandy looking beaches, grassy low hills, and snow mountain peaks.
-    //ifstream file("map.bmp");
-
 	std::ifstream file("Map/map.bmp");
 	std::ifstream prov_list("Map/prov.txt");
 	std::ifstream prov_file("Map/prov.bmp");
@@ -840,7 +832,8 @@ void MyApp::BuildLandGeometry()
 		OutputDebugStringA(("(" + std::to_string(w) + ", " + std::to_string(h) + ")\n").c_str());
 		std::vector<VertexForProvince> vertices(w * h);
 
-		int r = 0, g = 0, b = 0, addr;
+		int r = 0, g = 0, b = 0;
+		size_t addr;
 		for (size_t y = h - 1;; --y) {
 			for (size_t x = 0; x < w; ++x) {
 				//OutputDebugStringA((std::to_string(x) + ", " + std::to_string(y) + "\n").c_str());
@@ -848,7 +841,11 @@ void MyApp::BuildLandGeometry()
 				r = (int)buf[addr + 0];
 				g = (int)buf[addr + 1];
 				b = (int)buf[addr + 2];
-				vertices[x + y * w].Pos = { (x - (w - 1) / 2.f), (float)(r + g + b) / 128.0f - 0.5f + powf(MathHelper::RandF(), 6) / 2.f, (y - (h - 1) / 2.f) };
+				vertices[x + y * w].Pos = { (x - (w - 1) / 2.f), (float)(r + g + b) / 128.0f - 0.5f, (y - (h - 1) / 2.f) };
+				if (vertices[x + y * w].Pos.y > 1.5f)
+				{
+					vertices[x + y * w].Pos.y += powf(MathHelper::RandF(), 6) / 3.f;
+				}
 				vertices[x + y * w].TexC = { 1.f / (w - 1) * x, 1.f / (h - 1) * y};
 				vertices[x + y * w].Prov = 0;
 
@@ -909,9 +906,9 @@ void MyApp::BuildLandGeometry()
 
 		std::vector<std::uint16_t> indices;
 		
-		for (int x = 0; x < w - 2; ++x)
+		for (std::uint16_t x = 0; x < w - 2; ++x)
 		{
-			for (int y = 0; y < h - 2; ++y)
+			for (std::uint16_t y = 0; y < h - 2; ++y)
 			{
 				indices.push_back(x + 1 + (y + 1) * w); // 3
 				indices.push_back(x + 1 + y * w); // 1
@@ -1018,7 +1015,7 @@ void MyApp::BuildWavesGeometry()
 void MyApp::BuildBoxGeometry()
 {
 	GeometryGenerator geoGen;
-	GeometryGenerator::MeshData box = geoGen.CreateBox(8.0f, 8.0f, 8.0f, 3);
+	GeometryGenerator::MeshData box = geoGen.CreateBox(1.0f, 1.0f, 1.0f, 3);
 
 	std::vector<Vertex> vertices(box.Vertices.size());
 	for (size_t i = 0; i < box.Vertices.size(); ++i)
@@ -1187,10 +1184,12 @@ void MyApp::BuildMaterials()
 
 void MyApp::BuildRenderItems()
 {
+	UINT all_CBIndex = 0;
+
     auto wavesRitem = std::make_unique<RenderItem>();
     wavesRitem->World = MathHelper::Identity4x4();
 	XMStoreFloat4x4(&wavesRitem->TexTransform, XMMatrixScaling(5.0f, 5.0f, 1.0f));
-	wavesRitem->ObjCBIndex = 0;
+	wavesRitem->ObjCBIndex = all_CBIndex++;
 	wavesRitem->Mat = mMaterials["water"].get();
 	wavesRitem->Geo = mGeometries["waterGeo"].get();
 	wavesRitem->PrimitiveType = D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
@@ -1205,7 +1204,7 @@ void MyApp::BuildRenderItems()
     auto gridRitem = std::make_unique<RenderItem>();
     gridRitem->World = MathHelper::Identity4x4();
 	XMStoreFloat4x4(&gridRitem->TexTransform, XMMatrixScaling(5.0f, 5.0f, 1.0f));
-	gridRitem->ObjCBIndex = 1;
+	gridRitem->ObjCBIndex = all_CBIndex++;
 	gridRitem->Mat = mMaterials["grass"].get();
 	gridRitem->Geo = mGeometries["landGeo"].get();
 	gridRitem->PrimitiveType = D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
@@ -1215,21 +1214,79 @@ void MyApp::BuildRenderItems()
 
 	mRitemLayer[(int)RenderLayer::Province].push_back(gridRitem.get());
 
-	/*auto boxRitem = std::make_unique<RenderItem>();
-	XMStoreFloat4x4(&boxRitem->World, XMMatrixTranslation(3.0f, 2.0f, -9.0f));
-	boxRitem->ObjCBIndex = 2;
-	boxRitem->Mat = mMaterials["wirefence"].get();
-	boxRitem->Geo = mGeometries["boxGeo"].get();
-	boxRitem->PrimitiveType = D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
-	boxRitem->IndexCount = boxRitem->Geo->DrawArgs["box"].IndexCount;
-	boxRitem->StartIndexLocation = boxRitem->Geo->DrawArgs["box"].StartIndexLocation;
-	boxRitem->BaseVertexLocation = boxRitem->Geo->DrawArgs["box"].BaseVertexLocation;*/
+	
+	auto boxRitem = RenderItem();
 
-	//mRitemLayer[(int)RenderLayer::AlphaTested].push_back(boxRitem.get());
+	
 
+	boxRitem.ObjCBIndex = 2;
+	boxRitem.Mat = mMaterials["wirefence"].get();
+	boxRitem.Geo = mGeometries["boxGeo"].get();
+	boxRitem.PrimitiveType = D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+	boxRitem.IndexCount = boxRitem.Geo->DrawArgs["box"].IndexCount;
+	boxRitem.StartIndexLocation = boxRitem.Geo->DrawArgs["box"].StartIndexLocation;
+	boxRitem.BaseVertexLocation = boxRitem.Geo->DrawArgs["box"].BaseVertexLocation;
+
+	float border_wdith = 10.f;
+
+	{
+		auto newboxRitem = boxRitem;
+		auto newboxRitem_u = std::make_unique<RenderItem>(newboxRitem);
+
+		newboxRitem_u->ObjCBIndex = all_CBIndex++;
+		XMStoreFloat4x4(&newboxRitem_u->World, 
+			XMMatrixScaling(border_wdith, border_wdith, 2.0f * map_h) +
+			XMMatrixTranslation(1.0f * map_w + border_wdith / 2.f, border_wdith / 2.f, 0.0f)
+		);
+
+		mRitemLayer[(int)RenderLayer::Opaque].push_back(newboxRitem_u.get());
+		mAllRitems.push_back(std::move(newboxRitem_u));
+	}
+	{
+		auto newboxRitem = boxRitem;
+		auto newboxRitem_u = std::make_unique<RenderItem>(newboxRitem);
+
+		newboxRitem_u->ObjCBIndex = all_CBIndex++;
+		XMStoreFloat4x4(&newboxRitem_u->World,
+			XMMatrixScaling(border_wdith, border_wdith, 2.0f * map_h) +
+			XMMatrixTranslation(- 1.0f * map_w - border_wdith / 2.f, border_wdith / 2.f, 0.0f)
+		);
+
+		mRitemLayer[(int)RenderLayer::Opaque].push_back(newboxRitem_u.get());
+		mAllRitems.push_back(std::move(newboxRitem_u));
+	}
+	{
+		auto newboxRitem = boxRitem;
+		auto newboxRitem_u = std::make_unique<RenderItem>(newboxRitem);
+
+		newboxRitem_u->ObjCBIndex = all_CBIndex++;
+		XMStoreFloat4x4(&newboxRitem_u->World,
+			XMMatrixScaling(2.0f * map_w + border_wdith * 2.f, border_wdith, border_wdith) +
+			XMMatrixTranslation(0.0f, border_wdith / 2.f, -1.0f * map_h - border_wdith / 2.f)
+		);
+
+		mRitemLayer[(int)RenderLayer::Opaque].push_back(newboxRitem_u.get());
+		mAllRitems.push_back(std::move(newboxRitem_u));
+	}
+	{
+		auto newboxRitem = boxRitem;
+		auto newboxRitem_u = std::make_unique<RenderItem>(newboxRitem);
+
+		newboxRitem_u->ObjCBIndex = all_CBIndex++;
+		XMStoreFloat4x4(&newboxRitem_u->World,
+			XMMatrixScaling(2.0f * map_w + border_wdith * 2.f, border_wdith, border_wdith) +
+			XMMatrixTranslation(0.0f, border_wdith / 2.f, 1.0f * map_h - border_wdith / 2.f)
+		);
+
+		mRitemLayer[(int)RenderLayer::Opaque].push_back(newboxRitem_u.get());
+		mAllRitems.push_back(std::move(newboxRitem_u));
+	}
+		
+		
     mAllRitems.push_back(std::move(wavesRitem));
     mAllRitems.push_back(std::move(gridRitem));
-	//mAllRitems.push_back(std::move(boxRitem));
+
+
 }
 
 void MyApp::DrawRenderItems(ID3D12GraphicsCommandList* cmdList, const std::vector<RenderItem*>& ritems)

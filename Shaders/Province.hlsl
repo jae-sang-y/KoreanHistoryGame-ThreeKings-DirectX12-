@@ -75,6 +75,7 @@ struct VertexIn
 
 struct VertexOut
 {
+	float3 PosL    : VT_POSITION;
 	float4 PosH    : SV_POSITION;
 	float3 PosW    : POSITION;
 	float3 NormalW : NORMAL;
@@ -92,6 +93,7 @@ VertexOut VS(VertexIn vin)
 	vout.NormalW = mul(vin.NormalL, (float3x3)gWorld);
 
 	vout.PosH = mul(posW, gViewProj);
+	vout.PosL = vin.PosL;
 
 	vout.Prov = gProv[vin.Prov];
 
@@ -114,12 +116,28 @@ float4 PS(VertexOut pin) : SV_Target
 
 	float4 ambient = gAmbientLight * diffuseAlbedo;
 
-	if (pin.PosW.y > 0.f)
-	{
-		diffuseAlbedo.r = (diffuseAlbedo.r + pin.Prov.r * pin.Prov.a) / (1.f + pin.Prov.a);
-		diffuseAlbedo.g = (diffuseAlbedo.g + pin.Prov.g * pin.Prov.a) / (1.f + pin.Prov.a);
-		diffuseAlbedo.b = (diffuseAlbedo.b + pin.Prov.b * pin.Prov.a) / (1.f + pin.Prov.a);
+	float tmp = 1.f - pow((pin.PosW.y - diffuseAlbedo.g / 1.f - 0.5f) / 0.5f, 2.f);
 
+	if (tmp > 0.f)
+	{
+		diffuseAlbedo.r *= 1.f + tmp;
+		diffuseAlbedo.g *= 1.f + tmp;
+		diffuseAlbedo.b *= 1.f + tmp / 2.f;
+	}
+	if (pin.PosW.y < 0.5f)
+	{
+		diffuseAlbedo.b = 1.f;
+	}
+
+
+	//if (pin.PosW.y >= 0.5f)
+	{
+		//if (true)
+		{
+			diffuseAlbedo.r = (diffuseAlbedo.r + pin.Prov.r * pin.Prov.a) / (1.f + pin.Prov.a);
+			diffuseAlbedo.g = (diffuseAlbedo.g + pin.Prov.g * pin.Prov.a) / (1.f + pin.Prov.a);
+			diffuseAlbedo.b = (diffuseAlbedo.b + pin.Prov.b * pin.Prov.a) / (1.f + pin.Prov.a);
+		}
 		diffuseAlbedo.b *= (pin.PosW.y) / 2.5f;
 	}
 	
@@ -138,6 +156,10 @@ float4 PS(VertexOut pin) : SV_Target
 
 	litColor.a = diffuseAlbedo.a;
 
+	if (pin.PosL.x > gTotalTime)
+	{
+		litColor.r = 0.f;
+	}
 
 	return litColor;
 }
