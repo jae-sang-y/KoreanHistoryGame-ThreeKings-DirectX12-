@@ -1,8 +1,8 @@
 #pragma once
 
-#include "d3dUtil.h"
-#include "MathHelper.h"
-#include "UploadBuffer.h"
+#include "Common/d3dUtil.h"
+#include "Common/MathHelper.h"
+#include "Common/UploadBuffer.h"
 
 const int maxProvince = 256;
 

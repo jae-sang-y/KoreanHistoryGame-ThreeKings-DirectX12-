@@ -1,0 +1,110 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <FxCompile Include="Shaders\Province.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\LightingUtil.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\Default.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="FrameResource.cpp">
+      <Filter>App</Filter>
+    </ClCompile>
+    <ClCompile Include="Waves.cpp">
+      <Filter>App</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectXPractice.cpp">
+      <Filter>App</Filter>
+    </ClCompile>
+    <ClCompile Include="Common\d3dUtil.cpp">
+      <Filter>Common\Cpp</Filter>
+    </ClCompile>
+    <ClCompile Include="Common\DDSTextureLoader.cpp">
+      <Filter>Common\Cpp</Filter>
+    </ClCompile>
+    <ClCompile Include="Common\GameTimer.cpp">
+      <Filter>Common\Cpp</Filter>
+    </ClCompile>
+    <ClCompile Include="Common\GeometryGenerator.cpp">
+      <Filter>Common\Cpp</Filter>
+    </ClCompile>
+    <ClCompile Include="Common\MathHelper.cpp">
+      <Filter>Common\Cpp</Filter>
+    </ClCompile>
+    <ClCompile Include="Common\d3dApp.cpp">
+      <Filter>Common\Cpp</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="FrameResource.h">
+      <Filter>App</Filter>
+    </ClInclude>
+    <ClInclude Include="Waves.h">
+      <Filter>App</Filter>
+    </ClInclude>
+    <ClInclude Include="Common\GameTimer.h">
+      <Filter>Common</Filter>
+    </ClInclude>
+    <ClInclude Include="Common\GeometryGenerator.h">
+      <Filter>Common</Filter>
+    </ClInclude>
+    <ClInclude Include="Common\MathHelper.h">
+      <Filter>Common</Filter>
+    </ClInclude>
+    <ClInclude Include="Common\UploadBuffer.h">
+      <Filter>Common</Filter>
+    </ClInclude>
+    <ClInclude Include="Common\d3dApp.h">
+      <Filter>Common</Filter>
+    </ClInclude>
+    <ClInclude Include="Common\d3dUtil.h">
+      <Filter>Common</Filter>
+    </ClInclude>
+    <ClInclude Include="Common\d3dx12.h">
+      <Filter>Common</Filter>
+    </ClInclude>
+    <ClInclude Include="Common\DDSTextureLoader.h">
+      <Filter>Common</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Common">
+      <UniqueIdentifier>{c4e3c8f1-2f72-4342-b449-034951b92b98}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="App">
+      <UniqueIdentifier>{4b0ca14e-0c81-4936-a461-c6b2f94dba57}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Shaders">
+      <UniqueIdentifier>{c8d2d15c-704a-44f8-a0e4-38e849091bbb}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Map">
+      <UniqueIdentifier>{44a3b77a-3882-4edc-a226-6dd860ed581c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Common\Cpp">
+      <UniqueIdentifier>{4db1b5e7-a427-4e26-86dd-a2bd1e8d4635}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="Map\map.bmp">
+      <Filter>Map</Filter>
+    </Image>
+    <Image Include="Map\prov.bmp">
+      <Filter>Map</Filter>
+    </Image>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Map\map.psd">
+      <Filter>Map</Filter>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <Text Include="Map\prov.txt">
+      <Filter>Map</Filter>
+    </Text>
+  </ItemGroup>
+</Project>
