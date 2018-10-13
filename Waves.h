@@ -13,7 +13,11 @@
 #include <list>
 #include <DirectXMath.h>
 
-
+struct WavePixel
+{
+	float earth = 0.f;
+	float water = 0.f;
+};
 
 class Waves
 {
@@ -31,7 +35,9 @@ public:
 	float Depth()const;
 
 	// Returns the solution at the ith grid point.
-    const DirectX::XMFLOAT3& Position(int i)const { return mCurrSolution[i]; }
+	const DirectX::XMFLOAT3& Position(int i)const {
+		return mCurrSolution[i];
+	}
 
 	// Returns the solution normal at the ith grid point.
     const DirectX::XMFLOAT3& Normal(int i)const { return mNormals[i]; }
@@ -40,10 +46,13 @@ public:
     const DirectX::XMFLOAT3& TangentX(int i)const { return mTangentX[i]; }
 
 	void Update(float dt);
+	std::vector<float> mEarth;
+	std::vector<WavePixel> mPrevSolution;
+	std::vector<DirectX::XMFLOAT3> mCurrSolution;
 
 private:
-    int mNumRows = 0;
-    int mNumCols = 0;
+    int wave_h = 0;
+    int wave_w = 0;
 
     int mVertexCount = 0;
     int mTriangleCount = 0;
@@ -57,8 +66,6 @@ private:
     float mSpatialStep = 0.0f;
 	float mTotalTime = 0.0f;
 
-    std::vector<DirectX::XMFLOAT3> mPrevSolution;
-    std::vector<DirectX::XMFLOAT3> mCurrSolution;
     std::vector<DirectX::XMFLOAT3> mNormals;
     std::vector<DirectX::XMFLOAT3> mTangentX;
 };

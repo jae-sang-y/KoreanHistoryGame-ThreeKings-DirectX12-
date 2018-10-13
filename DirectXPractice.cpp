@@ -157,6 +157,20 @@ private:
 	size_t mCursorProvince = 1;
 
     POINT mLastMousePos;
+
+	struct Province {
+		unsigned int color;
+		unsigned int p_num, px, py;
+		Province()
+		{
+
+		}
+		Province (unsigned int _color, unsigned int _px, unsigned int _py):color(_color), px(_px), py(_py)
+		{		
+			p_num = 1;
+		}
+	};
+	std::unordered_map<int, Province> prov_stack;
 };
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE prevInstance, PSTR cmdLine, int showCmd)
@@ -210,7 +224,6 @@ bool MyApp::Initialize()
 	BuildDescriptorHeaps();
     BuildShadersAndInputLayout();
     BuildLandGeometry();
-	mWaves = std::make_unique<Waves>(map_h, map_w, 1.0f, 0.03f, 4.0f, 0.2f);
     BuildWavesGeometry();
 	BuildBoxGeometry();	
 	BuildMaterials();
@@ -516,7 +529,7 @@ void MyApp::UpdateMainPassCB(const GameTimer& gt)
 	mMainPassCB.DeltaTime = gt.DeltaTime();
 	mMainPassCB.AmbientLight = {0.f,0.f,0.f,0.f};//{ 0.25f, 0.25f, 0.35f, 1.0f };
 
-	float time = fmodf(mTimer.TotalTime() / 3.f + 10.f, 20.f) - 10.f;
+	float time = 0.f;// fmodf(mTimer.TotalTime() / 3.f + 0.f, 20.f) - 10.f;
 
 	mMainPassCB.Lights[0].Direction = { time , -0.57735f, 0.57735f };
 	
@@ -595,10 +608,8 @@ void MyApp::UpdateMainPassCB(const GameTimer& gt)
 
 void MyApp::UpdateWaves(const GameTimer& gt)
 {
-	// Update the wave simulation.
 	mWaves->Update(gt.DeltaTime());
 
-	// Update the wave vertex buffer with the new solution.
 	auto currWavesVB = mCurrFrameResource->WavesVB.get();
 	for(int i = 0; i < mWaves->VertexCount(); ++i)
 	{
@@ -607,15 +618,12 @@ void MyApp::UpdateWaves(const GameTimer& gt)
 		v.Pos = mWaves->Position(i);
 		v.Normal = mWaves->Normal(i);
 		
-		// Derive tex-coords from position by 
-		// mapping [-w/2,w/2] --> [0,1]
 		v.TexC.x = 0.5f + v.Pos.x / mWaves->Width();
 		v.TexC.y = 0.5f - v.Pos.z / mWaves->Depth();
 
 		currWavesVB->CopyData(i, v);
 	}
 
-	// Set the dynamic VB of the wave renderitem to the current frame VB.
 	mWavesRitem->Geo->VertexBufferGPU = currWavesVB->Resource();
 }
 
@@ -763,7 +771,8 @@ void MyApp::BuildShadersAndInputLayout()
 	};
 }
 
-int rgb2dex(int r, int g, int b)
+template<typename T>
+auto rgb2dex(T r, T g, T b) -> unsigned int
 {
 	return ((r * 256) + g) * 256 + b;
 }
@@ -776,7 +785,7 @@ void MyApp::BuildLandGeometry()
 	assert(file && prov_file && prov_list);
 	{
 		std::map<int, unsigned int> prov_key;
-		std::set<int> prov_stack;
+		
 		{
 			std::string index, r, g, b;
 			for (std::string line; std::getline(prov_list, line); )
@@ -834,6 +843,8 @@ void MyApp::BuildLandGeometry()
 
 		int r = 0, g = 0, b = 0;
 		size_t addr;
+		unsigned int dex;
+		mWaves = std::make_unique<Waves>(map_h, map_w, 1.0f, 0.03f, 4.0f, 0.2f);
 		for (size_t y = h - 1;; --y) {
 			for (size_t x = 0; x < w; ++x) {
 				//OutputDebugStringA((std::to_string(x) + ", " + std::to_string(y) + "\n").c_str());
@@ -842,27 +853,38 @@ void MyApp::BuildLandGeometry()
 				g = (int)buf[addr + 1];
 				b = (int)buf[addr + 2];
 				vertices[x + y * w].Pos = { (x - (w - 1) / 2.f), (float)(r + g + b) / 128.0f - 0.5f, (y - (h - 1) / 2.f) };
+
 				if (vertices[x + y * w].Pos.y > 1.5f)
 				{
 					vertices[x + y * w].Pos.y += powf(MathHelper::RandF(), 6) / 3.f;
 				}
+
+				mWaves->mPrevSolution[x + (h - 1 - y) * w].earth = vertices[x + y * w].Pos.y;
+
 				vertices[x + y * w].TexC = { 1.f / (w - 1) * x, 1.f / (h - 1) * y};
 				vertices[x + y * w].Prov = 0;
 
-				auto search = prov_key.find(rgb2dex(prov_buf.at(addr + 2), prov_buf.at(addr + 1), prov_buf.at(addr)));
-				if (search != prov_key.end())
+				dex = rgb2dex(prov_buf.at(addr + 2), prov_buf.at(addr + 1), prov_buf.at(addr));
+				
+				
+				//Registed Province Color
+				if (auto search = prov_key.find(dex); search != prov_key.end())
 				{
 					vertices[x + y * w].Prov = search->second;
-				}
-				else
-				{
-					if (prov_stack.find(rgb2dex(prov_buf.at(addr + 2), prov_buf.at(addr + 1), prov_buf.at(addr))) == prov_stack.end())
+					if (auto search_stack = prov_stack.find(search->first); search_stack == prov_stack.end())
 					{
-						OutputDebugStringA((std::to_string(prov_buf.at(addr + 2)) + ", " + std::to_string(prov_buf.at(addr + 1)) + ", " + std::to_string(prov_buf.at(addr)) + "\n").c_str());
-						prov_stack.insert(rgb2dex(prov_buf.at(addr + 2), prov_buf.at(addr + 1), prov_buf.at(addr)));
+						prov_stack[prov_key.at(dex)] = Province(dex, x, y);
 					}
-					
+					else
+					{
+						search_stack->second.px += x;
+						search_stack->second.py += y;
+						++search_stack->second.p_num;
+					}
 				}
+				//Unregisted Province Color
+				//else {}
+
 
 				float dx = 0.f, dy = 0.f;
 
@@ -1077,7 +1099,9 @@ void MyApp::BuildPSOs()
 		reinterpret_cast<BYTE*>(mShaders["opaquePS"]->GetBufferPointer()),
 		mShaders["opaquePS"]->GetBufferSize()
 	};
-	opaquePsoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
+	auto Raster = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
+	Raster.MultisampleEnable = true;
+	opaquePsoDesc.RasterizerState = Raster;
 	opaquePsoDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
 	opaquePsoDesc.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
 	opaquePsoDesc.SampleMask = UINT_MAX;
@@ -1165,7 +1189,7 @@ void MyApp::BuildMaterials()
 	water->Name = "water";
 	water->MatCBIndex = 1;
 	water->DiffuseSrvHeapIndex = 1;
-	water->DiffuseAlbedo = XMFLOAT4(1.0f, 1.0f, 1.0f, 0.5f);
+	water->DiffuseAlbedo = XMFLOAT4(0.3f, 0.5f, 1.0f, 0.75f);
 	water->FresnelR0 = XMFLOAT3(0.1f, 0.1f, 0.1f);
 	water->Roughness = 0.0f;
 
@@ -1276,6 +1300,20 @@ void MyApp::BuildRenderItems()
 		XMStoreFloat4x4(&newboxRitem_u->World,
 			XMMatrixScaling(2.0f * map_w + border_wdith * 2.f, border_wdith, border_wdith) +
 			XMMatrixTranslation(0.0f, border_wdith / 2.f, 1.0f * map_h - border_wdith / 2.f)
+		);
+
+		mRitemLayer[(int)RenderLayer::Opaque].push_back(newboxRitem_u.get());
+		mAllRitems.push_back(std::move(newboxRitem_u));
+	}
+
+	for (const auto& O : prov_stack)
+	{
+		auto newboxRitem = boxRitem;
+		auto newboxRitem_u = std::make_unique<RenderItem>(newboxRitem);
+
+		newboxRitem_u->ObjCBIndex = all_CBIndex++;
+		XMStoreFloat4x4(&newboxRitem_u->World,
+			XMMatrixTranslation(1.f * O.second.px / O.second.p_num - 0.5f * map_w, 5.f, 1.f * O.second.py / O.second.p_num - 0.5f * map_h)
 		);
 
 		mRitemLayer[(int)RenderLayer::Opaque].push_back(newboxRitem_u.get());

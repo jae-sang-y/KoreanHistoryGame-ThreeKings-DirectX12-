@@ -88,6 +88,9 @@
     <Filter Include="Common\Cpp">
       <UniqueIdentifier>{4db1b5e7-a427-4e26-86dd-a2bd1e8d4635}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Textures">
+      <UniqueIdentifier>{2d64f4c4-ddab-4abc-aaa8-f16a7fae791b}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <Image Include="Map\map.bmp">
@@ -95,6 +98,9 @@
     </Image>
     <Image Include="Map\prov.bmp">
       <Filter>Map</Filter>
+    </Image>
+    <Image Include="Textures\water1.dds">
+      <Filter>Textures</Filter>
     </Image>
   </ItemGroup>
   <ItemGroup>

@@ -75,7 +75,6 @@ struct VertexIn
 
 struct VertexOut
 {
-	float3 PosL    : VT_POSITION;
 	float4 PosH    : SV_POSITION;
 	float3 PosW    : POSITION;
 	float3 NormalW : NORMAL;
@@ -93,7 +92,6 @@ VertexOut VS(VertexIn vin)
 	vout.NormalW = mul(vin.NormalL, (float3x3)gWorld);
 
 	vout.PosH = mul(posW, gViewProj);
-	vout.PosL = vin.PosL;
 
 	vout.Prov = gProv[vin.Prov];
 
@@ -155,11 +153,6 @@ float4 PS(VertexOut pin) : SV_Target
 #endif
 
 	litColor.a = diffuseAlbedo.a;
-
-	if (pin.PosL.x > gTotalTime)
-	{
-		litColor.r = 0.f;
-	}
 
 	return litColor;
 }
