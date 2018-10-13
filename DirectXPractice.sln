@@ -3,7 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 15
 VisualStudioVersion = 15.0.28010.2019
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "BlendDemo", "BlendDemo.vcxproj", "{5ED524F3-165A-425D-B380-3FA556A48005}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "DirectXPractice", "DirectXPractice.vcxproj", "{5ED524F3-165A-425D-B380-3FA556A48005}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Map Editor", "Map Editor\Map Editor.csproj", "{85B63D42-01CB-4E72-88C2-F8C30959DE50}"
 EndProject

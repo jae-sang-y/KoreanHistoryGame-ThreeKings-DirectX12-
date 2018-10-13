@@ -39,7 +39,7 @@
     </Text>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="BlendApp.cpp">
+    <ClCompile Include="DirectXPractice.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="Waves.cpp">
