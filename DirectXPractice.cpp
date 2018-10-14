@@ -28,7 +28,11 @@ const int gNumFrameResources = 3;
 struct RenderItem
 {
 	RenderItem() = default;
- 
+
+	bool Visible = true;
+
+	BoundingBox Bounds;
+
     // World matrix of the shape that describes the object's local space
     // relative to the world space, which defines the position, orientation,
     // and scale of the object in the world.
@@ -55,6 +59,7 @@ struct RenderItem
     UINT IndexCount = 0;
     UINT StartIndexLocation = 0;
     int BaseVertexLocation = 0;
+	std::string Name = "None";
 };
 
 enum class RenderLayer : int
@@ -107,7 +112,7 @@ private:
     void BuildMaterials();
     void BuildRenderItems();
     void DrawRenderItems(ID3D12GraphicsCommandList* cmdList, const std::vector<RenderItem*>& ritems);
-
+	void Pick(int sx, int sy);
 	std::array<const CD3DX12_STATIC_SAMPLER_DESC, 6> GetStaticSamplers();
 
 private:
@@ -157,18 +162,21 @@ private:
 	size_t mCursorProvince = 1;
 
     POINT mLastMousePos;
+	RenderItem* mPickedRitem = nullptr;
 
 	struct Province {
-		unsigned int color, p_num;
+		std::string name;
+		unsigned int color;
+		int p_num = 1;
 		float px, py, pz;
 		Province()
 		{
-
 		}
-		Province (unsigned int _color, float _px, float _py, float _pz):color(_color), px(_px), py(_py), pz(_pz)
+		Province (std::string name, unsigned int _color, float _px, float _py, float _pz):name(), color(_color), px(_px), py(_py), pz(_pz)
 		{		
-			p_num = 1;
 		}
+		const std::string& GetName() { return name; }
+		const unsigned int& GetColor() { return color; }
 	};
 	std::unordered_map<int, Province> prov_stack;
 };
@@ -352,9 +360,84 @@ void MyApp::OnMouseDown(WPARAM btnState, int x, int y)
     mLastMousePos.x = x;
     mLastMousePos.y = y;
 
+	Pick(x, y);
+
     SetCapture(mhMainWnd);
+
 }
 
+void MyApp::Pick(int sx, int sy)
+{
+	
+	XMFLOAT4X4 P = mProj;
+
+	float vx = (+2.0f*sx / mClientWidth - 1.0f) / P(0, 0);
+	float vy = (-2.0f*sy / mClientHeight + 1.0f) / P(1, 1);
+
+	XMVECTOR rayOrigin = XMVectorSet(0.0f, 0.0f, 0.0f, 1.0f);
+	XMVECTOR rayDir = XMVectorSet(vx, vy, 1.0f, 0.0f);
+
+	XMMATRIX V = XMLoadFloat4x4(&mView);
+	XMMATRIX invView = XMMatrixInverse(&XMMatrixDeterminant(V), V);
+
+	mPickedRitem->Visible = false;
+
+	for (auto ri : mRitemLayer[(int)RenderLayer::Province])
+	{
+		auto geo = ri->Geo;
+
+		if (!ri->Visible)
+			continue;
+
+		XMMATRIX W = XMLoadFloat4x4(&ri->World);
+		XMMATRIX invWorld = XMMatrixInverse(&XMMatrixDeterminant(W), W);
+
+		XMMATRIX toLocal = XMMatrixMultiply(invView, invWorld);
+
+		rayOrigin = XMVector3TransformCoord(rayOrigin, toLocal);
+		rayDir = XMVector3TransformNormal(rayDir, toLocal);
+		rayDir = XMVector3Normalize(rayDir);
+
+		float tmin = 0.0f;
+		OutputDebugStringA(ri->Name.c_str());
+		std::uint16_t lastPick = 0;
+		if (ri->Bounds.Intersects(rayOrigin, rayDir, tmin))
+		{
+			auto vertices = (VertexForProvince*)geo->VertexBufferCPU->GetBufferPointer();
+			auto indices = (std::uint16_t*)geo->IndexBufferCPU->GetBufferPointer();
+			UINT triCount = ri->IndexCount / 3;
+
+			tmin = MathHelper::Infinity;
+			for (UINT i = 0; i < triCount; ++i)
+			{
+				
+				std::uint16_t i0 = indices[i * 3 + 0];
+				std::uint16_t i1 = indices[i * 3 + 1];
+				std::uint16_t i2 = indices[i * 3 + 2];
+				
+
+				XMVECTOR v0 = XMLoadFloat3(&vertices[i0].Pos);
+				XMVECTOR v1 = XMLoadFloat3(&vertices[i1].Pos);
+				XMVECTOR v2 = XMLoadFloat3(&vertices[i2].Pos);
+
+				float t = 0.0f;
+				if (TriangleTests::Intersects(rayOrigin, rayDir, v0, v1, v2, t))
+				{
+					if (t < tmin)
+					{
+						tmin = t;
+						lastPick = indices[i * 3 + 0];
+					}
+				}
+			}
+			if (lastPick != 0)
+			{
+				//prov_stack[vertices[lastPick].Prov].
+			}
+		}
+
+	}
+}
 void MyApp::OnMouseUp(WPARAM btnState, int x, int y)
 {
     ReleaseCapture();
@@ -774,7 +857,7 @@ void MyApp::BuildLandGeometry()
 		std::map<int, unsigned int> prov_key;
 		
 		{
-			std::string index, r, g, b;
+			std::string name, index, r, g, b;
 			for (std::string line; std::getline(prov_list, line); )
 			{
 				for (size_t i = 0; i < line.size(); ++i)
@@ -785,7 +868,8 @@ void MyApp::BuildLandGeometry()
 						continue;
 					}
 				}
-
+				name = line.substr(0, line.find('/'));
+				line.erase(0, line.find('/') + 1);
 				index = line.substr(0, line.find('='));
 				line.erase(0, line.find('=') + 1);
 				r = line.substr(0, line.find(','));
@@ -806,7 +890,7 @@ void MyApp::BuildLandGeometry()
 		file.seekg(0, std::ios::beg);
 		prov_file.seekg(0, std::ios::beg);
 
-		OutputDebugStringA(std::to_string(length).c_str());
+		OutputDebugStringA(("File Length : " + std::to_string(length)).c_str());
 			
 		std::vector<unsigned char> prov_buf(length);
 		std::vector<unsigned char> buf(length);
@@ -825,9 +909,15 @@ void MyApp::BuildLandGeometry()
 		map_w = w;
 		map_h = h;
 
-		OutputDebugStringA(("(" + std::to_string(w) + ", " + std::to_string(h) + ")\n").c_str());
+		OutputDebugStringA(("Map Size(w, h) = (" + std::to_string(w) + ", " + std::to_string(h) + ")\n").c_str());
 		std::vector<VertexForProvince> vertices(w * h);
 
+		XMFLOAT3 vMinf3(+MathHelper::Infinity, +MathHelper::Infinity, +MathHelper::Infinity);
+		XMFLOAT3 vMaxf3(-MathHelper::Infinity, -MathHelper::Infinity, -MathHelper::Infinity);
+
+		XMVECTOR vMin = XMLoadFloat3(&vMinf3);
+		XMVECTOR vMax = XMLoadFloat3(&vMaxf3);
+		
 		int r = 0, g = 0, b = 0;
 		size_t addr;
 		unsigned int dex;
@@ -839,7 +929,7 @@ void MyApp::BuildLandGeometry()
 				r = (int)buf[addr + 0];
 				g = (int)buf[addr + 1];
 				b = (int)buf[addr + 2];
-				vertices[x + y * w].Pos = { (x - (w - 1) / 2.f), (float)(r + g + b) / 128.0f - 0.5f, (y - (h - 1) / 2.f) };
+				vertices[x + y * w].Pos = { (x - (w - 1) / 2.f), (float)(r + g + b) / 128.0f - 1.5f, (y - (h - 1) / 2.f) };
 
 				if (vertices[x + y * w].Pos.y > 1.5f)
 				{
@@ -850,6 +940,11 @@ void MyApp::BuildLandGeometry()
 
 				vertices[x + y * w].TexC = { 1.f / (w - 1) * x, 1.f / (h - 1) * y};
 				vertices[x + y * w].Prov = 0;
+
+				XMVECTOR P = XMLoadFloat3(&vertices[x + y * w].Pos);
+				
+				vMin = XMVectorMin(vMin, P);
+				vMax = XMVectorMax(vMax, P);
 				 
 				dex = rgb2dex(prov_buf.at(addr + 2), prov_buf.at(addr + 1), prov_buf.at(addr));
 				
@@ -860,7 +955,7 @@ void MyApp::BuildLandGeometry()
 					vertices[x + y * w].Prov = search->second;
 					if (auto search_stack = prov_stack.find(search->second); search_stack == prov_stack.end())
 					{
-						prov_stack[search->second] = Province(dex, vertices[x + y * w].Pos.x, vertices[x + y * w].Pos.y, vertices[x + y * w].Pos.z);
+						prov_stack[search->second] = Province("2",dex, vertices[x + y * w].Pos.x, vertices[x + y * w].Pos.y, vertices[x + y * w].Pos.z);
 					}
 					else
 					{
@@ -889,6 +984,7 @@ void MyApp::BuildLandGeometry()
 				break;
 			}
 		}
+
 
 		concurrency::parallel_for((size_t)1, h - 1, [&](size_t i)
 		{
@@ -930,7 +1026,7 @@ void MyApp::BuildLandGeometry()
 
 			}
 		}
-		OutputDebugStringA((std::to_string(vertices.size()) + " : " + std::to_string(indices.size()) + "\n").c_str());
+		OutputDebugStringA(("Vertext Size, Indices Size = " + std::to_string(vertices.size()) + " : " + std::to_string(indices.size()) + "\n").c_str());
 		const UINT vbByteSize = (UINT)vertices.size() * sizeof(VertexForProvince);
 
 		const UINT ibByteSize = (UINT)indices.size() * sizeof(std::uint16_t);
@@ -954,11 +1050,16 @@ void MyApp::BuildLandGeometry()
 		geo->VertexBufferByteSize = vbByteSize;
 		geo->IndexFormat = DXGI_FORMAT_R16_UINT;
 		geo->IndexBufferByteSize = ibByteSize;
+		
+		BoundingBox bounds;
+		XMStoreFloat3(&bounds.Center, 0.5f*(vMin + vMax));
+		XMStoreFloat3(&bounds.Extents, 0.5f*(vMax - vMin));
 
 		SubmeshGeometry submesh;
 		submesh.IndexCount = (UINT)indices.size();
 		submesh.StartIndexLocation = 0;
 		submesh.BaseVertexLocation = 0;
+		submesh.Bounds = bounds;
 
 		geo->DrawArgs["grid"] = submesh;
 
@@ -1016,6 +1117,7 @@ void MyApp::BuildWavesGeometry()
 	submesh.IndexCount = (UINT)indices.size();
 	submesh.StartIndexLocation = 0;
 	submesh.BaseVertexLocation = 0;
+	submesh.Bounds = BoundingBox();
 
 	geo->DrawArgs["grid"] = submesh;
 
@@ -1027,6 +1129,15 @@ void MyApp::BuildBoxGeometry()
 	GeometryGenerator geoGen;
 	GeometryGenerator::MeshData box = geoGen.CreateBox(1.0f, 1.0f, 1.0f, 3);
 
+
+
+	XMFLOAT3 vMinf3(+MathHelper::Infinity, +MathHelper::Infinity, +MathHelper::Infinity);
+	XMFLOAT3 vMaxf3(-MathHelper::Infinity, -MathHelper::Infinity, -MathHelper::Infinity);
+
+	XMVECTOR vMin = XMLoadFloat3(&vMinf3);
+	XMVECTOR vMax = XMLoadFloat3(&vMaxf3);
+
+
 	std::vector<Vertex> vertices(box.Vertices.size());
 	for (size_t i = 0; i < box.Vertices.size(); ++i)
 	{
@@ -1034,6 +1145,10 @@ void MyApp::BuildBoxGeometry()
 		vertices[i].Pos = p;
 		vertices[i].Normal = box.Vertices[i].Normal;
 		vertices[i].TexC = box.Vertices[i].TexC;
+
+		XMVECTOR P = XMLoadFloat3(&vertices[i].Pos);
+		vMin = XMVectorMin(vMin, P);
+		vMax = XMVectorMax(vMax, P);
 	}
 
 	const UINT vbByteSize = (UINT)vertices.size() * sizeof(Vertex);
@@ -1061,10 +1176,15 @@ void MyApp::BuildBoxGeometry()
 	geo->IndexFormat = DXGI_FORMAT_R16_UINT;
 	geo->IndexBufferByteSize = ibByteSize;
 
+	BoundingBox bounds;
+	XMStoreFloat3(&bounds.Center, 0.5f*(vMin + vMax));
+	XMStoreFloat3(&bounds.Extents, 0.5f*(vMax - vMin));
+
 	SubmeshGeometry submesh;
 	submesh.IndexCount = (UINT)indices.size();
 	submesh.StartIndexLocation = 0;
 	submesh.BaseVertexLocation = 0;
+	submesh.Bounds = bounds;
 
 	geo->DrawArgs["box"] = submesh;
 
@@ -1210,6 +1330,7 @@ void MyApp::BuildRenderItems()
 	wavesRitem->Mat = mMaterials["water"].get();
 	wavesRitem->Geo = mGeometries["waterGeo"].get();
 	wavesRitem->PrimitiveType = D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+	wavesRitem->Bounds = wavesRitem->Geo->DrawArgs["grid"].Bounds;
 	wavesRitem->IndexCount = wavesRitem->Geo->DrawArgs["grid"].IndexCount;
 	wavesRitem->StartIndexLocation = wavesRitem->Geo->DrawArgs["grid"].StartIndexLocation;
 	wavesRitem->BaseVertexLocation = wavesRitem->Geo->DrawArgs["grid"].BaseVertexLocation;
@@ -1225,9 +1346,11 @@ void MyApp::BuildRenderItems()
 	gridRitem->Mat = mMaterials["grass"].get();
 	gridRitem->Geo = mGeometries["landGeo"].get();
 	gridRitem->PrimitiveType = D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+	gridRitem->Bounds = gridRitem->Geo->DrawArgs["grid"].Bounds;
     gridRitem->IndexCount = gridRitem->Geo->DrawArgs["grid"].IndexCount;
     gridRitem->StartIndexLocation = gridRitem->Geo->DrawArgs["grid"].StartIndexLocation;
     gridRitem->BaseVertexLocation = gridRitem->Geo->DrawArgs["grid"].BaseVertexLocation;
+	gridRitem->Name = "Province";
 
 	mRitemLayer[(int)RenderLayer::Province].push_back(gridRitem.get());
 
@@ -1240,11 +1363,13 @@ void MyApp::BuildRenderItems()
 	boxRitem.Mat = mMaterials["wirefence"].get();
 	boxRitem.Geo = mGeometries["boxGeo"].get();
 	boxRitem.PrimitiveType = D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+	boxRitem.Bounds = boxRitem.Geo->DrawArgs["box"].Bounds;
 	boxRitem.IndexCount = boxRitem.Geo->DrawArgs["box"].IndexCount;
 	boxRitem.StartIndexLocation = boxRitem.Geo->DrawArgs["box"].StartIndexLocation;
 	boxRitem.BaseVertexLocation = boxRitem.Geo->DrawArgs["box"].BaseVertexLocation;
 
 	float border_wdith = 10.f;
+	float border_height = 2.f;
 
 	{
 		auto newboxRitem = boxRitem;
@@ -1252,7 +1377,7 @@ void MyApp::BuildRenderItems()
 
 		newboxRitem_u->ObjCBIndex = all_CBIndex++;
 		XMStoreFloat4x4(&newboxRitem_u->World, 
-			XMMatrixScaling(border_wdith, border_wdith, 2.0f * map_h) +
+			XMMatrixScaling(border_wdith, border_wdith * border_height, 2.0f * map_h) +
 			XMMatrixTranslation(1.0f * map_w + border_wdith / 2.f, border_wdith / 2.f, 0.0f)
 		);
 
@@ -1265,7 +1390,7 @@ void MyApp::BuildRenderItems()
 
 		newboxRitem_u->ObjCBIndex = all_CBIndex++;
 		XMStoreFloat4x4(&newboxRitem_u->World,
-			XMMatrixScaling(border_wdith, border_wdith, 2.0f * map_h) +
+			XMMatrixScaling(border_wdith, border_wdith * border_height, 2.0f * map_h) +
 			XMMatrixTranslation(- 1.0f * map_w - border_wdith / 2.f, border_wdith / 2.f, 0.0f)
 		);
 
@@ -1278,7 +1403,7 @@ void MyApp::BuildRenderItems()
 
 		newboxRitem_u->ObjCBIndex = all_CBIndex++;
 		XMStoreFloat4x4(&newboxRitem_u->World,
-			XMMatrixScaling(2.0f * map_w + border_wdith * 2.f, border_wdith, border_wdith) +
+			XMMatrixScaling(2.0f * map_w + border_wdith * 2.f, border_wdith * border_height, border_wdith) +
 			XMMatrixTranslation(0.0f, border_wdith / 2.f, -1.0f * map_h - border_wdith / 2.f)
 		);
 
@@ -1291,7 +1416,7 @@ void MyApp::BuildRenderItems()
 
 		newboxRitem_u->ObjCBIndex = all_CBIndex++;
 		XMStoreFloat4x4(&newboxRitem_u->World,
-			XMMatrixScaling(2.0f * map_w + border_wdith * 2.f, border_wdith, border_wdith) +
+			XMMatrixScaling(2.0f * map_w + border_wdith * 2.f, border_wdith * border_height, border_wdith) +
 			XMMatrixTranslation(0.0f, border_wdith / 2.f, 1.0f * map_h - border_wdith / 2.f)
 		);
 
@@ -1315,7 +1440,24 @@ void MyApp::BuildRenderItems()
 		mAllRitems.push_back(std::move(newboxRitem_u));
 	}
 		
-		
+	auto pickedRitem = std::make_unique<RenderItem>();
+	pickedRitem->World = MathHelper::Identity4x4();
+	pickedRitem->TexTransform = MathHelper::Identity4x4();
+	pickedRitem->ObjCBIndex = 1;
+	pickedRitem->Mat = mMaterials["wirefence"].get();
+	pickedRitem->Geo = mGeometries["boxGeo"].get();
+	pickedRitem->PrimitiveType = D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+
+	pickedRitem->Visible = false;
+
+	pickedRitem->IndexCount = 0;
+	pickedRitem->StartIndexLocation = 0;
+	pickedRitem->BaseVertexLocation = 0;
+	mPickedRitem = pickedRitem.get();
+	mRitemLayer[(int)RenderLayer::Opaque].push_back(pickedRitem.get());
+
+
+	mAllRitems.push_back(std::move(pickedRitem));
     mAllRitems.push_back(std::move(wavesRitem));
     mAllRitems.push_back(std::move(gridRitem));
 
@@ -1334,6 +1476,10 @@ void MyApp::DrawRenderItems(ID3D12GraphicsCommandList* cmdList, const std::vecto
     for(size_t i = 0; i < ritems.size(); ++i)
     {
         auto ri = ritems[i];
+		
+		if (!ri->Visible)
+			continue;
+
 
         cmdList->IASetVertexBuffers(0, 1, &ri->Geo->VertexBufferView());
         cmdList->IASetIndexBuffer(&ri->Geo->IndexBufferView());

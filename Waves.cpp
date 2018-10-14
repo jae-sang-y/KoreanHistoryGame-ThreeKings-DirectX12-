@@ -93,7 +93,7 @@ void Waves::Update(float dt)
 	{
 		for (int j = 0; j < wave_h; ++j)
 		{
-			mCurrSolution[i*wave_h + j].y = 1.0f;
+			mCurrSolution[i*wave_h + j].y = 0.0f;
 		}
 	});
 

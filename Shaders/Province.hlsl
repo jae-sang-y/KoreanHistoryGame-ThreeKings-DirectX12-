@@ -97,7 +97,7 @@ float4 PS(VertexOut pin) : SV_Target
 
 	float4 ambient = gAmbientLight * diffuseAlbedo;
 
-	float tmp = 1.f - pow((pin.PosW.y - diffuseAlbedo.g / 1.f - 0.5f) / 0.5f, 2.f);
+	float tmp = 1.f - pow((pin.PosW.y - diffuseAlbedo.g / 1.f - 0.5f + 1.f) / 0.5f, 2.f);
 
 	if (tmp > 0.f)
 	{
@@ -105,7 +105,7 @@ float4 PS(VertexOut pin) : SV_Target
 		diffuseAlbedo.g *= 1.f + tmp;
 		diffuseAlbedo.b *= 1.f + tmp / 2.f;
 	}
-	if (pin.PosW.y < 0.5f)
+	if (pin.PosW.y < -0.5f)
 	{
 		diffuseAlbedo.b = 1.f;
 	}
@@ -119,7 +119,7 @@ float4 PS(VertexOut pin) : SV_Target
 			diffuseAlbedo.g = (diffuseAlbedo.g + pin.Prov.g * pin.Prov.a) / (1.f + pin.Prov.a);
 			diffuseAlbedo.b = (diffuseAlbedo.b + pin.Prov.b * pin.Prov.a) / (1.f + pin.Prov.a);
 		}
-		diffuseAlbedo.b *= (pin.PosW.y) / 2.5f;
+		diffuseAlbedo.b *= (pin.PosW.y + 1.f) / 2.5f;
 		//diffuseAlbedo.r *= (pin.PosW.y) / 2.5f;
 		//diffuseAlbedo.g *= (pin.PosW.y) / 5.0f;
 	}
