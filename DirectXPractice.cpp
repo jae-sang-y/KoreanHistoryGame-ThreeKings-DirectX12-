@@ -159,13 +159,13 @@ private:
     POINT mLastMousePos;
 
 	struct Province {
-		unsigned int color;
-		unsigned int p_num, px, py;
+		unsigned int color, p_num;
+		float px, py, pz;
 		Province()
 		{
 
 		}
-		Province (unsigned int _color, unsigned int _px, unsigned int _py):color(_color), px(_px), py(_py)
+		Province (unsigned int _color, float _px, float _py, float _pz):color(_color), px(_px), py(_py), pz(_pz)
 		{		
 			p_num = 1;
 		}
@@ -575,25 +575,11 @@ void MyApp::UpdateMainPassCB(const GameTimer& gt)
 	}
 */
 
-	mMainPassCB.gProv[1] = { 1.0f, 0.0f, 0.0f, 1.0f };
-	mMainPassCB.gProv[2] = { 0.0f, 1.0f, 0.0f, 1.0f };
-	mMainPassCB.gProv[3] = { 0.0f, 0.0f, 1.0f, 1.0f };
-	mMainPassCB.gProv[4] = { 1.0f, 1.0f, 0.0f, 1.0f };
-	mMainPassCB.gProv[5] = { 1.0f, 0.0f, 1.0f, 1.0f };
-	mMainPassCB.gProv[6] = { 0.0f, 1.0f, 1.0f, 1.0f };
-	mMainPassCB.gProv[7] = { 1.0f, 1.0f, 1.0f, 1.0f };
-	mMainPassCB.gProv[8] = { 0.0f, 1.0f, 1.0f, 1.0f };
-	mMainPassCB.gProv[9] = { 1.0f, 1.0f, 1.0f, 1.0f };
+	for (const auto& O : prov_stack)
+	{
+		mMainPassCB.gProv[O.first] = { ((O.second.color & 16711680) / 65536) / 255.f,((O.second.color & 65208) / 256) / 255.f, (O.second.color & 255) / 255.f, 1.0f };
+	}
 
-	mMainPassCB.gProv[10] = { 0.0f, 0.0f, 0.5f, 1.0f };
-	mMainPassCB.gProv[11] = { 0.0f, 0.0f, 1.0f, 1.0f };
-	mMainPassCB.gProv[12] = { 0.0f, 0.5f, 0.0f, 1.0f };
-	mMainPassCB.gProv[13] = { 0.0f, 0.5f, 0.5f, 1.0f };
-	mMainPassCB.gProv[14] = { 0.0f, 0.5f, 1.0f, 1.0f };
-	mMainPassCB.gProv[15] = { 0.0f, 0.1f, 0.5f, 1.0f };
-	mMainPassCB.gProv[16] = { 0.5f, 0.0f, 0.0f, 1.0f };
-	mMainPassCB.gProv[17] = { 0.5f, 0.0f, 0.5f, 1.0f };
-	mMainPassCB.gProv[18] = { 0.5f, 0.0f, 1.0f, 1.0f };
 	
 	mMainPassCB.Lights[0].Strength = { MathHelper::Clamp(2.f - powf(time / 4, 2), 0.f, 1.f), MathHelper::Clamp(1.5f - powf(time / 4, 2), 0.f, 1.f), MathHelper::Clamp(1.f - powf(time / 4, 2), 0.f, 1.f) };
 
@@ -750,6 +736,7 @@ void MyApp::BuildShadersAndInputLayout()
 	};
 
 	mShaders["provincePS"] = d3dUtil::CompileShader(L"Shaders\\Province.hlsl", nullptr, "PS", "ps_5_0");
+	mShaders["provinceGS"] = d3dUtil::CompileShader(L"Shaders\\GeometryShader.hlsl", nullptr, "GS", "gs_5_0");
 	mShaders["provinceVS"] = d3dUtil::CompileShader(L"Shaders\\Province.hlsl", nullptr, "VS", "vs_5_0");
 
 	mShaders["standardVS"] = d3dUtil::CompileShader(L"Shaders\\Default.hlsl", nullptr, "VS", "vs_5_0");
@@ -863,7 +850,7 @@ void MyApp::BuildLandGeometry()
 
 				vertices[x + y * w].TexC = { 1.f / (w - 1) * x, 1.f / (h - 1) * y};
 				vertices[x + y * w].Prov = 0;
-
+				 
 				dex = rgb2dex(prov_buf.at(addr + 2), prov_buf.at(addr + 1), prov_buf.at(addr));
 				
 				
@@ -871,14 +858,15 @@ void MyApp::BuildLandGeometry()
 				if (auto search = prov_key.find(dex); search != prov_key.end())
 				{
 					vertices[x + y * w].Prov = search->second;
-					if (auto search_stack = prov_stack.find(search->first); search_stack == prov_stack.end())
+					if (auto search_stack = prov_stack.find(search->second); search_stack == prov_stack.end())
 					{
-						prov_stack[prov_key.at(dex)] = Province(dex, x, y);
+						prov_stack[search->second] = Province(dex, vertices[x + y * w].Pos.x, vertices[x + y * w].Pos.y, vertices[x + y * w].Pos.z);
 					}
 					else
 					{
-						search_stack->second.px += x;
-						search_stack->second.py += y;
+						search_stack->second.px += vertices[x + y * w].Pos.x;
+						search_stack->second.py += vertices[x + y * w].Pos.y;
+						search_stack->second.pz += vertices[x + y * w].Pos.z;
 						++search_stack->second.p_num;
 					}
 				}
@@ -1099,6 +1087,7 @@ void MyApp::BuildPSOs()
 		reinterpret_cast<BYTE*>(mShaders["opaquePS"]->GetBufferPointer()),
 		mShaders["opaquePS"]->GetBufferSize()
 	};
+	
 	auto Raster = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
 	Raster.MultisampleEnable = true;
 	opaquePsoDesc.RasterizerState = Raster;
@@ -1153,6 +1142,10 @@ void MyApp::BuildPSOs()
 	{
 		reinterpret_cast<BYTE*>(mShaders["provincePS"]->GetBufferPointer()),
 		mShaders["provincePS"]->GetBufferSize()
+	};
+	ProvincePsoDesc.GS = {
+		reinterpret_cast<BYTE*>(mShaders["provinceGS"]->GetBufferPointer()),
+		mShaders["provinceGS"]->GetBufferSize()
 	};
 	ProvincePsoDesc.VS =
 	{
@@ -1313,7 +1306,9 @@ void MyApp::BuildRenderItems()
 
 		newboxRitem_u->ObjCBIndex = all_CBIndex++;
 		XMStoreFloat4x4(&newboxRitem_u->World,
-			XMMatrixTranslation(1.f * O.second.px / O.second.p_num - 0.5f * map_w, 5.f, 1.f * O.second.py / O.second.p_num - 0.5f * map_h)
+			XMMatrixTranslation(2.f * O.second.px / O.second.p_num, 2.f * O.second.py / O.second.p_num + 1.0f	, 2.f * O.second.pz / O.second.p_num)
+			+
+			XMMatrixScaling(5.0f, 1.0f, 5.0f) 
 		);
 
 		mRitemLayer[(int)RenderLayer::Opaque].push_back(newboxRitem_u.get());

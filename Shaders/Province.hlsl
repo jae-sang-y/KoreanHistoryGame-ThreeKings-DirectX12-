@@ -12,6 +12,7 @@
 
 #define MaxProvs 256
 
+#include "Common.hlsl"
 #include "LightingUtil.hlsl"
 
 Texture2D    gDiffuseMap : register(t0);
@@ -62,24 +63,6 @@ cbuffer cbMaterial : register(b2)
 	float3   gFresnelR0;
 	float    gRoughness;
 	float4x4 gMatTransform;
-};
-
-
-struct VertexIn
-{
-	float3 PosL    : POSITION;
-	float3 NormalL : NORMAL;
-	float2 TexC    : TEXCOORD;
-	uint Prov : PROVCOLOR;
-};
-
-struct VertexOut
-{
-	float4 PosH    : SV_POSITION;
-	float3 PosW    : POSITION;
-	float3 NormalW : NORMAL;
-	float2 TexC    : TEXCOORD;
-	float4 Prov : PROVCOLOR;
 };
 
 VertexOut VS(VertexIn vin)
@@ -137,6 +120,8 @@ float4 PS(VertexOut pin) : SV_Target
 			diffuseAlbedo.b = (diffuseAlbedo.b + pin.Prov.b * pin.Prov.a) / (1.f + pin.Prov.a);
 		}
 		diffuseAlbedo.b *= (pin.PosW.y) / 2.5f;
+		//diffuseAlbedo.r *= (pin.PosW.y) / 2.5f;
+		//diffuseAlbedo.g *= (pin.PosW.y) / 5.0f;
 	}
 	
 	const float shininess = 1.0f - gRoughness;
