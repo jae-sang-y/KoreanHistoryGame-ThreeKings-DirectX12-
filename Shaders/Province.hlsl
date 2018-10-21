@@ -97,31 +97,25 @@ float4 PS(VertexOut pin) : SV_Target
 
 	float4 ambient = gAmbientLight * diffuseAlbedo;
 
-	float tmp = 1.f - pow((pin.PosW.y - diffuseAlbedo.g / 1.f - 0.5f + 1.f) / 0.5f, 2.f);
-
-	if (tmp > 0.f)
+	//Sand and Mountain
+	if (pin.PosW.y < 0.5f)
 	{
-		diffuseAlbedo.r *= 1.f + tmp;
-		diffuseAlbedo.g *= 1.f + tmp;
-		diffuseAlbedo.b *= 1.f + tmp / 2.f;
-	}
-	if (pin.PosW.y < -0.5f)
-	{
-		diffuseAlbedo.b = 1.f;
-	}
-
-
-	//if (pin.PosW.y >= 0.5f)
-	{
-		//if (true)
+		if (pin.PosW.y > -0.5f)
 		{
-			diffuseAlbedo.r = (diffuseAlbedo.r + pin.Prov.r * pin.Prov.a) / (1.f + pin.Prov.a);
-			diffuseAlbedo.g = (diffuseAlbedo.g + pin.Prov.g * pin.Prov.a) / (1.f + pin.Prov.a);
-			diffuseAlbedo.b = (diffuseAlbedo.b + pin.Prov.b * pin.Prov.a) / (1.f + pin.Prov.a);
+			float tmp = max(min(1.f - pow(pin.PosW.y * 2.f, 2) * 1.3f, 0.5f), 0.0f);
+			diffuseAlbedo.r = (diffuseAlbedo.r * (1.f - tmp) + 0.9f * tmp);
+			diffuseAlbedo.g = (diffuseAlbedo.g * (1.f - tmp) + 0.8f * tmp);
+			diffuseAlbedo.b = (diffuseAlbedo.b * (1.f - tmp) + 0.3f * tmp);
 		}
-		diffuseAlbedo.b *= (pin.PosW.y + 1.f) / 2.5f;
-		//diffuseAlbedo.r *= (pin.PosW.y) / 2.5f;
-		//diffuseAlbedo.g *= (pin.PosW.y) / 5.0f;
+	}
+	else
+	{
+		diffuseAlbedo.b *= (pin.PosW.y - 0.5f) / 2.5f;
+	}
+
+	if (pin.PosW.y >= 0.5f && pin.Prov.a > 0.f)
+	{
+		diffuseAlbedo.rgb = diffuseAlbedo.rgb * (1.f - pin.Prov.a) + pin.Prov.rgb * pin.Prov.a;
 	}
 	
 	const float shininess = 1.0f - gRoughness;
@@ -136,7 +130,6 @@ float4 PS(VertexOut pin) : SV_Target
 	float fogAmount = saturate((distToEye - gFogStart) / gFogRange);
 	litColor = lerp(litColor, gFogColor, fogAmount);
 #endif
-
 	litColor.a = diffuseAlbedo.a;
 
 	return litColor;

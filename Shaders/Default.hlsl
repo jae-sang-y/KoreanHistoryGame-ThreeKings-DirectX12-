@@ -114,6 +114,15 @@ VertexOut VS(VertexIn vin)
 	float4 texC = mul(float4(vin.TexC, 0.0f, 1.0f), gTexTransform);
 	vout.TexC = mul(texC, gMatTransform).xy;
 	
+	#ifdef WAVE
+	float a = sin(gTotalTime * 0.001f) * 120.f, b = 0, c = cos(gTotalTime * 0.001f) * 120.f;
+	float r = sqrt(pow(vout.PosW.x - a, 2) + pow(vout.PosW.y - b, 2) + pow(vout.PosW.z - c, 2));
+	r += sqrt(pow(vout.PosW.x + a, 2) + pow(vout.PosW.y + b, 2) + pow(vout.PosW.z + c, 2));
+	vout.PosH.y += 0.1f * sin(r + gTotalTime * 10.f);
+	//vout.TexC.x += 0.0001f * sin(gTotalTime);
+	//vout.TexC.y += 0.0001f * cos(gTotalTime);
+	#endif
+
     return vout;
 }
 

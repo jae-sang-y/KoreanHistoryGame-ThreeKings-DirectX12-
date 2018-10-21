@@ -172,11 +172,9 @@ private:
 		Province()
 		{
 		}
-		Province (std::string name, unsigned int _color, float _px, float _py, float _pz):name(), color(_color), px(_px), py(_py), pz(_pz)
+		Province (std::string _name, unsigned int _color, float _px, float _py, float _pz):name(_name), color(_color), px(_px), py(_py), pz(_pz)
 		{		
 		}
-		const std::string& GetName() { return name; }
-		const unsigned int& GetColor() { return color; }
 	};
 	std::unordered_map<int, Province> prov_stack;
 };
@@ -360,7 +358,10 @@ void MyApp::OnMouseDown(WPARAM btnState, int x, int y)
     mLastMousePos.x = x;
     mLastMousePos.y = y;
 
-	Pick(x, y);
+	if (btnState & MK_MBUTTON)
+	{
+		Pick(x, y);
+	}
 
     SetCapture(mhMainWnd);
 
@@ -432,7 +433,7 @@ void MyApp::Pick(int sx, int sy)
 			}
 			if (lastPick != 0)
 			{
-				//prov_stack[vertices[lastPick].Prov].
+				MessageBoxA(nullptr, prov_stack[vertices[lastPick].Prov].name.c_str(), nullptr, NULL);
 			}
 		}
 
@@ -660,8 +661,9 @@ void MyApp::UpdateMainPassCB(const GameTimer& gt)
 
 	for (const auto& O : prov_stack)
 	{
-		mMainPassCB.gProv[O.first] = { ((O.second.color & 16711680) / 65536) / 255.f,((O.second.color & 65208) / 256) / 255.f, (O.second.color & 255) / 255.f, 1.0f };
+		mMainPassCB.gProv[O.first] = { ((O.second.color & 16711680) / 65536) / 255.f,((O.second.color & 65208) / 256) / 255.f, (O.second.color & 255) / 255.f, 0.5f };
 	}
+	mMainPassCB.gProv[0] = {0.f, 0.f, 0.f, 0.f};
 
 	
 	mMainPassCB.Lights[0].Strength = { MathHelper::Clamp(2.f - powf(time / 4, 2), 0.f, 1.f), MathHelper::Clamp(1.5f - powf(time / 4, 2), 0.f, 1.f), MathHelper::Clamp(1.f - powf(time / 4, 2), 0.f, 1.f) };
@@ -677,7 +679,7 @@ void MyApp::UpdateMainPassCB(const GameTimer& gt)
 
 void MyApp::UpdateWaves(const GameTimer& gt)
 {
-	mWaves->Update(gt.DeltaTime());
+	mWaves->Update(gt.TotalTime());
 
 	auto currWavesVB = mCurrFrameResource->WavesVB.get();
 	for(int i = 0; i < mWaves->VertexCount(); ++i)
@@ -812,6 +814,12 @@ void MyApp::BuildShadersAndInputLayout()
 		NULL, NULL
 	};
 
+	const D3D_SHADER_MACRO waves_defines[] =
+	{
+		"WAVE", "1",
+		NULL, NULL
+	};
+
 	const D3D_SHADER_MACRO alphaTestDefines[] =
 	{
 		"ALPHA_TEST", "1",
@@ -823,6 +831,7 @@ void MyApp::BuildShadersAndInputLayout()
 	mShaders["provinceVS"] = d3dUtil::CompileShader(L"Shaders\\Province.hlsl", nullptr, "VS", "vs_5_0");
 
 	mShaders["standardVS"] = d3dUtil::CompileShader(L"Shaders\\Default.hlsl", nullptr, "VS", "vs_5_0");
+	mShaders["waveVS"] = d3dUtil::CompileShader(L"Shaders\\Default.hlsl", waves_defines, "VS", "vs_5_0");
 	mShaders["opaquePS"] = d3dUtil::CompileShader(L"Shaders\\Default.hlsl", nullptr, "PS", "ps_5_0");
 	mShaders["alphaTestedPS"] = d3dUtil::CompileShader(L"Shaders\\Default.hlsl", alphaTestDefines, "PS", "ps_5_0");
 	
@@ -854,7 +863,7 @@ void MyApp::BuildLandGeometry()
 	std::ifstream prov_file("Map/prov.bmp");
 	assert(file && prov_file && prov_list);
 	{
-		std::map<int, unsigned int> prov_key;
+		std::map<int, std::pair<unsigned int, std::string>> prov_key;
 		
 		{
 			std::string name, index, r, g, b;
@@ -880,7 +889,7 @@ void MyApp::BuildLandGeometry()
 
 				//OutputDebugStringA((index + "::(" + r + ", " + g + ", " + b + ")\n").c_str());
 
-				prov_key[rgb2dex(std::stoi(r), std::stoi(g), std::stoi(b))] = std::stoi(index);
+				prov_key.insert(std::make_pair(rgb2dex(std::stoi(r), std::stoi(g), std::stoi(b)), std::make_pair(std::stoi(index), name)));
 			}
 		}
 
@@ -952,10 +961,10 @@ void MyApp::BuildLandGeometry()
 				//Registed Province Color
 				if (auto search = prov_key.find(dex); search != prov_key.end())
 				{
-					vertices[x + y * w].Prov = search->second;
-					if (auto search_stack = prov_stack.find(search->second); search_stack == prov_stack.end())
+					vertices[x + y * w].Prov = search->second.first;
+					if (auto search_stack = prov_stack.find(search->second.first); search_stack == prov_stack.end())
 					{
-						prov_stack[search->second] = Province("2",dex, vertices[x + y * w].Pos.x, vertices[x + y * w].Pos.y, vertices[x + y * w].Pos.z);
+						prov_stack.insert(std::make_pair(search->second.first, Province(search->second.second,dex, vertices[x + y * w].Pos.x, vertices[x + y * w].Pos.y, vertices[x + y * w].Pos.z)));
 					}
 					else
 					{
@@ -1239,7 +1248,11 @@ void MyApp::BuildPSOs()
 	transparencyBlendDesc.BlendOpAlpha = D3D12_BLEND_OP_ADD;
 	transparencyBlendDesc.LogicOp = D3D12_LOGIC_OP_NOOP;
 	transparencyBlendDesc.RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
-
+	transparentPsoDesc.VS =
+	{
+		reinterpret_cast<BYTE*>(mShaders["waveVS"]->GetBufferPointer()),
+		mShaders["waveVS"]->GetBufferSize()
+	};
 	transparentPsoDesc.BlendState.RenderTarget[0] = transparencyBlendDesc;
 	ThrowIfFailed(md3dDevice->CreateGraphicsPipelineState(&transparentPsoDesc, IID_PPV_ARGS(&mPSOs["transparent"])));
 
@@ -1302,8 +1315,8 @@ void MyApp::BuildMaterials()
 	water->Name = "water";
 	water->MatCBIndex = 1;
 	water->DiffuseSrvHeapIndex = 1;
-	water->DiffuseAlbedo = XMFLOAT4(0.3f, 0.5f, 1.0f, 0.75f);
-	water->FresnelR0 = XMFLOAT3(0.1f, 0.1f, 0.1f);
+	water->DiffuseAlbedo = XMFLOAT4(0.3f, 0.5f, 1.0f, 0.85f);
+	water->FresnelR0 = XMFLOAT3(0.3f, 0.3f, 0.3f);
 	water->Roughness = 0.0f;
 
 	auto wirefence = std::make_unique<Material>();

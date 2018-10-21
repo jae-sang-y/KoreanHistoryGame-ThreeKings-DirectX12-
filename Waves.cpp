@@ -84,16 +84,29 @@ float Waves::Depth()const
 	return wave_h*mSpatialStep;
 }
 
-void Waves::Update(float dt)
+void Waves::Update(float tt)
 {
-	int QW[4][2] = { {1,0} , {0,-1} , {-1,0} , {0,1} };
-	int a, b, c, d;
+	std::vector<XMFLOAT3> vec = 
+	{
+		XMFLOAT3(sinf(tt * 0.13f) * 20.f, 0.f, cosf(tt * 0.1f) * 20.f),
+		XMFLOAT3(sinf(tt / 10 / 3.14) * 50.f + wave_w / 3.f, 0.f, fabsf(100.f - fmodf(tt, 200.f)) - 50.f + wave_h / 3.f),
+		XMFLOAT3(sinf(tt / 10 / 3.14) * 50.f + wave_w / 4.f, 0.f, fabsf(100.f - fmodf(tt, 200.f)) - 50.f - wave_h / 5.f),
+		XMFLOAT3(sinf(tt / 10 / 3.14) * 50.f - wave_w / 1.4f, 0.f, fabsf(100.f - fmodf(tt, 200.f)) - 50.f - wave_h / 2.3f)
+	};
+
 	
-	concurrency::parallel_for(0, wave_w, [this](int i)
+	concurrency::parallel_for(0, wave_w, [tt, vec, this](int i)
 	{
 		for (int j = 0; j < wave_h; ++j)
 		{
-			mCurrSolution[i*wave_h + j].y = 0.0f;
+			float r = 0;
+			auto& P = mCurrSolution[i*wave_h + j].y;
+			P = -1.f;
+			for (const auto& O : vec)
+			{
+				r = sqrtf(powf(i - O.x - wave_w / 2.f, 2) + powf(-O.y, 2) + powf(j - O.z - wave_h / 2.f, 2));
+				P = std::max(0.1f * sinf(r + tt * 10.f) / log(r + 3.14f), P);
+			}
 		}
 	});
 
