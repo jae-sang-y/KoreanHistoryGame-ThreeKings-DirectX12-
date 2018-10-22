@@ -55,6 +55,7 @@ cbuffer cbPass : register(b1)
 
 	Light gLights[MaxLights];
 	float4 gProv[MaxProvs];
+	float4 gSubProv[MaxProvs];
 };
 
 cbuffer cbMaterial : register(b2)
@@ -77,6 +78,7 @@ VertexOut VS(VertexIn vin)
 	vout.PosH = mul(posW, gViewProj);
 
 	vout.Prov = gProv[vin.Prov];
+	vout.SubProv = gSubProv[vin.Prov];
 
 	float4 texC = mul(float4(vin.TexC, 0.0f, 1.0f), gTexTransform);
 	vout.TexC = mul(texC, gMatTransform).xy;
@@ -115,7 +117,14 @@ float4 PS(VertexOut pin) : SV_Target
 
 	if (pin.PosW.y >= 0.5f && pin.Prov.a > 0.f)
 	{
-		diffuseAlbedo.rgb = diffuseAlbedo.rgb * (1.f - pin.Prov.a) + pin.Prov.rgb * pin.Prov.a;
+		if (sin((pin.PosW.x + pin.PosW.z) * 2.7f) > 0.3f)
+		{
+			diffuseAlbedo.rgb = diffuseAlbedo.rgb * (1.f - pin.SubProv.a) + pin.SubProv.rgb * pin.SubProv.a;
+		}
+		else
+		{
+			diffuseAlbedo.rgb = diffuseAlbedo.rgb * (1.f - pin.Prov.a) + pin.Prov.rgb * pin.Prov.a;
+		}
 	}
 	
 	const float shininess = 1.0f - gRoughness;

@@ -42,6 +42,7 @@ struct PassConstants
     // are spot lights for a maximum of MaxLights per object.
     Light Lights[MaxLights];
 	DirectX::XMFLOAT4 gProv[maxProvince] = { {0.f,0.f,0.f,0.f}, };
+	DirectX::XMFLOAT4 gSubProv[maxProvince] = { {0.f,0.f,0.f,0.f}, };
 };
 
 struct Vertex
@@ -56,6 +57,7 @@ struct VertexForProvince
 	DirectX::XMFLOAT3 Normal;
 	DirectX::XMFLOAT2 TexC;
 	unsigned int Prov;
+	unsigned int SubProv;
 };
 
 // Stores the resources needed for the CPU to build the command lists

@@ -17,6 +17,10 @@ using Microsoft::WRL::ComPtr;
 using namespace DirectX;
 using namespace DirectX::PackedVector;
 
+using ProvinceId = std::uint64_t;
+using NationId = std::uint64_t;
+using Color32 = std::uint32_t;
+
 #pragma comment(lib, "d3dcompiler.lib")
 #pragma comment(lib, "D3D12.lib")
 
@@ -112,7 +116,7 @@ private:
     void BuildMaterials();
     void BuildRenderItems();
     void DrawRenderItems(ID3D12GraphicsCommandList* cmdList, const std::vector<RenderItem*>& ritems);
-	void Pick(int sx, int sy);
+	void Pick(WPARAM btnState, int sx, int sy);
 	std::array<const CD3DX12_STATIC_SAMPLER_DESC, 6> GetStaticSamplers();
 
 private:
@@ -143,6 +147,7 @@ private:
 
 	// Render items divided by PSO.
 	std::vector<RenderItem*> mRitemLayer[(int)RenderLayer::Count];
+	std::vector<VertexForProvince> mLandVertices;
 
 	std::unique_ptr<Waves> mWaves;
 
@@ -166,17 +171,21 @@ private:
 
 	struct Province {
 		std::string name;
-		unsigned int color;
-		int p_num = 1;
+		Color32 color;
+		std::uint64_t p_num = 1;
 		float px, py, pz;
+		float ty;
+		bool is_rebel = false;
+		NationId owner = 0;
+
 		Province()
 		{
 		}
-		Province (std::string _name, unsigned int _color, float _px, float _py, float _pz):name(_name), color(_color), px(_px), py(_py), pz(_pz)
+		Province (std::string _name, Color32 _color, float _px, float _py, float _pz):name(_name), color(_color), px(_px), py(_py), pz(_pz), ty(_py)
 		{		
 		}
 	};
-	std::unordered_map<int, Province> prov_stack;
+	std::unordered_map<ProvinceId, Province> prov_stack;
 };
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE prevInstance, PSTR cmdLine, int showCmd)
@@ -358,18 +367,20 @@ void MyApp::OnMouseDown(WPARAM btnState, int x, int y)
     mLastMousePos.x = x;
     mLastMousePos.y = y;
 
-	if (btnState & MK_MBUTTON)
+	//if (btnState & MK_LBUTTON)
 	{
-		Pick(x, y);
+		Pick(btnState, x, y);
 	}
 
     SetCapture(mhMainWnd);
 
 }
 
-void MyApp::Pick(int sx, int sy)
+void MyApp::Pick(WPARAM btnState, int sx, int sy)
 {
-	
+	#pragma region Pick
+
+
 	XMFLOAT4X4 P = mProj;
 
 	float vx = (+2.0f*sx / mClientWidth - 1.0f) / P(0, 0);
@@ -400,7 +411,6 @@ void MyApp::Pick(int sx, int sy)
 		rayDir = XMVector3Normalize(rayDir);
 
 		float tmin = 0.0f;
-		OutputDebugStringA(ri->Name.c_str());
 		std::uint16_t lastPick = 0;
 		if (ri->Bounds.Intersects(rayOrigin, rayDir, tmin))
 		{
@@ -431,9 +441,26 @@ void MyApp::Pick(int sx, int sy)
 					}
 				}
 			}
+			#pragma endregion
 			if (lastPick != 0)
 			{
-				MessageBoxA(nullptr, prov_stack[vertices[lastPick].Prov].name.c_str(), nullptr, NULL);
+				if (btnState & MK_LBUTTON)
+				{
+					mCursorProvince = vertices[lastPick].Prov;
+					if (auto& O = prov_stack.find(vertices[lastPick].Prov); O != prov_stack.end())
+					{
+						O->second.is_rebel = !O->second.is_rebel;
+					}
+				}
+				if (btnState & MK_RBUTTON)
+				{
+					mCursorProvince = vertices[lastPick].Prov;
+					if (auto& O = prov_stack.find(vertices[lastPick].Prov); O != prov_stack.end())
+					{
+						O->second.owner = (O->second.owner + 1) % 4;
+					}
+				}
+
 			}
 		}
 
@@ -617,54 +644,30 @@ void MyApp::UpdateMainPassCB(const GameTimer& gt)
 
 	mMainPassCB.Lights[0].Direction = { time , -0.57735f, 0.57735f };
 	
-	//Please Check This
-	//maxProvince;
+	std::unordered_map<NationId, XMFLOAT4> colors;
 
-	//mMainPassCB.gProv[0] = { 0.0f, 0.0f, 0.0f, 0.0f };
-
-	//for (size_t prov = 1; prov < 19; ++prov)
-	/*{
-		switch (prov)
-		{
-		case 4:
-		case 6:
-		case 7:
-			mMainPassCB.gProv[prov] = { 1.0f, 1.0f, 0.0f, 1.0f };
-			break;
-		case 3:
-			mMainPassCB.gProv[prov] = { 1.0f, 0.4f, 0.4f, 1.0f };
-			break;
-		case 2:
-		case 5:
-			mMainPassCB.gProv[prov] = { 0.4f, 0.8f, 1.0f, 1.0f };
-			break;
-		case 8:
-		case 9:
-		case 10:
-		case 11:
-		case 12:
-		case 13:
-		case 14:
-		case 15:
-		case 16:
-		case 17:
-		case 18:
-			mMainPassCB.gProv[prov] = { 1.0f, 0.0f, 0.0f, 1.0f };
-			break;
-
-		case 1:
-			mMainPassCB.gProv[prov] = { 0.4f, 0.5f, 1.0f, 1.0f };
-			break;
-		}
-	}
-*/
+	colors.insert(std::make_pair(1, XMFLOAT4(1.0f, 1.0f, 0.2f, 1.f)));
+	colors.insert(std::make_pair(2, XMFLOAT4(0.2f, 1.0f, 0.9f, 1.f)));
+	colors.insert(std::make_pair(3, XMFLOAT4(0.8f, 0.0f, 0.0f, 1.f)));
 
 	for (const auto& O : prov_stack)
 	{
-		mMainPassCB.gProv[O.first] = { ((O.second.color & 16711680) / 65536) / 255.f,((O.second.color & 65208) / 256) / 255.f, (O.second.color & 255) / 255.f, 0.5f };
+		if (auto P = colors.find(O.second.owner); P != colors.end())
+		{
+			mMainPassCB.gProv[O.first] = P->second;
+		}
+		else
+		{
+			mMainPassCB.gProv[O.first] = { 0.f,0.f,0.f,0.f };
+		}
+		//{ ((O.second.color & 16711680) / 65536) / 255.f,((O.second.color & 65208) / 256) / 255.f, (O.second.color & 255) / 255.f, 0.5f };
+		mMainPassCB.gSubProv[O.first] = O.second.is_rebel ? XMFLOAT4(0.2f, 0.f, 0.f, 1.f) : mMainPassCB.gProv[O.first];
 	}
-	mMainPassCB.gProv[0] = {0.f, 0.f, 0.f, 0.f};
 
+	mMainPassCB.gProv[0] = { 0.f, 0.f, 0.f, 0.f };
+	mMainPassCB.gSubProv[0] = mMainPassCB.gProv[0];
+	
+	
 	
 	mMainPassCB.Lights[0].Strength = { MathHelper::Clamp(2.f - powf(time / 4, 2), 0.f, 1.f), MathHelper::Clamp(1.5f - powf(time / 4, 2), 0.f, 1.f), MathHelper::Clamp(1.f - powf(time / 4, 2), 0.f, 1.f) };
 
@@ -851,9 +854,28 @@ void MyApp::BuildShadersAndInputLayout()
 }
 
 template<typename T>
-auto rgb2dex(T r, T g, T b) -> unsigned int
+Color32 rgb2dex(const T& r, const T& g, const T& b)
 {
 	return ((r * 256) + g) * 256 + b;
+}
+
+void dex2rgb(float& r, float& g, float& b, const Color32& dex)
+{
+	r = ((dex & 16711680) / 65536) / 255.f;
+	g = ((dex & 65208) / 256) / 255.f;
+	b = (dex & 255) / 255.f;
+}
+void dex2rgb(unsigned char& r, unsigned char& g, unsigned char& b, const Color32& dex)
+{
+	r = (dex & 16711680) / 65536;
+	g = (dex & 65208) / 256;
+	b = (dex & 255);
+}
+void dex2rgb(unsigned int& r, unsigned int& g, unsigned int& b, const Color32& dex)
+{
+	r = (dex & 16711680) / 65536;
+	g = (dex & 65208) / 256;
+	b = (dex & 255);
 }
 
 void MyApp::BuildLandGeometry()
@@ -863,7 +885,7 @@ void MyApp::BuildLandGeometry()
 	std::ifstream prov_file("Map/prov.bmp");
 	assert(file && prov_file && prov_list);
 	{
-		std::map<int, std::pair<unsigned int, std::string>> prov_key;
+		std::map<Color32, std::pair<ProvinceId, std::string>> prov_key;
 		
 		{
 			std::string name, index, r, g, b;
@@ -899,7 +921,7 @@ void MyApp::BuildLandGeometry()
 		file.seekg(0, std::ios::beg);
 		prov_file.seekg(0, std::ios::beg);
 
-		OutputDebugStringA(("File Length : " + std::to_string(length)).c_str());
+		OutputDebugStringA(("File Length : " + std::to_string(length) + "\n").c_str());
 			
 		std::vector<unsigned char> prov_buf(length);
 		std::vector<unsigned char> buf(length);
@@ -919,7 +941,8 @@ void MyApp::BuildLandGeometry()
 		map_h = h;
 
 		OutputDebugStringA(("Map Size(w, h) = (" + std::to_string(w) + ", " + std::to_string(h) + ")\n").c_str());
-		std::vector<VertexForProvince> vertices(w * h);
+		mLandVertices.resize(w * h);
+		std::unordered_map<Color32, std::pair<XMUINT3, size_t>> unregisted_color;
 
 		XMFLOAT3 vMinf3(+MathHelper::Infinity, +MathHelper::Infinity, +MathHelper::Infinity);
 		XMFLOAT3 vMaxf3(-MathHelper::Infinity, -MathHelper::Infinity, -MathHelper::Infinity);
@@ -927,9 +950,11 @@ void MyApp::BuildLandGeometry()
 		XMVECTOR vMin = XMLoadFloat3(&vMinf3);
 		XMVECTOR vMax = XMLoadFloat3(&vMaxf3);
 		
-		int r = 0, g = 0, b = 0;
+		Color32 ind;
+		unsigned char r, g, b;
+		float R0, G0, B0, R1, G1, B1, syc;
 		size_t addr;
-		unsigned int dex;
+		Color32 dex;
 		mWaves = std::make_unique<Waves>(map_h, map_w, 1.0f, 0.03f, 4.0f, 0.2f);
 		for (size_t y = h - 1;; --y) {
 			for (size_t x = 0; x < w; ++x) {
@@ -938,44 +963,71 @@ void MyApp::BuildLandGeometry()
 				r = (int)buf[addr + 0];
 				g = (int)buf[addr + 1];
 				b = (int)buf[addr + 2];
-				vertices[x + y * w].Pos = { (x - (w - 1) / 2.f), (float)(r + g + b) / 128.0f - 1.5f, (y - (h - 1) / 2.f) };
+				mLandVertices[x + y * w].Pos = { (x - (w - 1) / 2.f), (float)(r + g + b) / 128.0f - 1.5f, (y - (h - 1) / 2.f) };
 
-				if (vertices[x + y * w].Pos.y > 1.5f)
+				if (mLandVertices[x + y * w].Pos.y > 1.5f)
 				{
-					vertices[x + y * w].Pos.y += powf(MathHelper::RandF(), 6) / 3.f;
+					mLandVertices[x + y * w].Pos.y += powf(MathHelper::RandF(), 6) / 3.f;
 				}
 
-				mWaves->mPrevSolution[x + (h - 1 - y) * w].earth = vertices[x + y * w].Pos.y;
+				mWaves->mPrevSolution[x + (h - 1 - y) * w].earth = mLandVertices[x + y * w].Pos.y;
 
-				vertices[x + y * w].TexC = { 1.f / (w - 1) * x, 1.f / (h - 1) * y};
-				vertices[x + y * w].Prov = 0;
+				mLandVertices[x + y * w].TexC = { 1.f / (w - 1) * x, 1.f / (h - 1) * y};
+				mLandVertices[x + y * w].Prov = 0;
 
-				XMVECTOR P = XMLoadFloat3(&vertices[x + y * w].Pos);
+				XMVECTOR P = XMLoadFloat3(&mLandVertices[x + y * w].Pos);
 				
 				vMin = XMVectorMin(vMin, P);
 				vMax = XMVectorMax(vMax, P);
 				 
 				dex = rgb2dex(prov_buf.at(addr + 2), prov_buf.at(addr + 1), prov_buf.at(addr));
 				
-				
 				//Registed Province Color
 				if (auto search = prov_key.find(dex); search != prov_key.end())
 				{
-					vertices[x + y * w].Prov = search->second.first;
+					mLandVertices[x + y * w].Prov = search->second.first;
 					if (auto search_stack = prov_stack.find(search->second.first); search_stack == prov_stack.end())
 					{
-						prov_stack.insert(std::make_pair(search->second.first, Province(search->second.second,dex, vertices[x + y * w].Pos.x, vertices[x + y * w].Pos.y, vertices[x + y * w].Pos.z)));
+						prov_stack.insert(std::make_pair(search->second.first, Province(search->second.second,dex, mLandVertices[x + y * w].Pos.x, mLandVertices[x + y * w].Pos.y, mLandVertices[x + y * w].Pos.z)));
 					}
 					else
 					{
-						search_stack->second.px += vertices[x + y * w].Pos.x;
-						search_stack->second.py += vertices[x + y * w].Pos.y;
-						search_stack->second.pz += vertices[x + y * w].Pos.z;
+						search_stack->second.px += mLandVertices[x + y * w].Pos.x;
+						search_stack->second.py += mLandVertices[x + y * w].Pos.y;
+						if (search_stack->second.ty < mLandVertices[x + y * w].Pos.y)
+						{
+							search_stack->second.ty = mLandVertices[x + y * w].Pos.y;
+						}
+						search_stack->second.pz += mLandVertices[x + y * w].Pos.z;
 						++search_stack->second.p_num;
 					}
 				}
-				//Unregisted Province Color
-				//else {}
+				else if (dex * (dex - 8421504) != 0)
+				{
+
+					if (auto O = unregisted_color.find(dex); O == unregisted_color.end())
+					{
+						XMUINT3 u3;
+						syc = MathHelper::Infinity;
+						dex2rgb(R0, G0, B0, dex);
+
+						for (const auto& P : prov_key)
+						{
+							dex2rgb(R1, G1, B1, P.first);
+							if (float get = powf(R0 - R1, 2.f) + powf(G0 - G1, 2.f) + powf(B0 - B1, 2.f); get < syc)
+							{
+								dex2rgb(u3.x, u3.y, u3.z, P.first);
+								syc = get;
+								ind = P.first;
+							}
+						}
+						unregisted_color.insert(std::make_pair(dex,std::make_pair(XMUINT3(std::move(u3)),1)));
+					}
+					else
+					{
+						O->second.second++;
+					}
+				}
 
 
 				float dx = 0.f, dy = 0.f;
@@ -983,10 +1035,10 @@ void MyApp::BuildLandGeometry()
 				XMFLOAT3 n = { 0.f, 1.f, 0.f };
 				if (x > 0)
 				{
-					n.x = vertices[x + y * w - 1].Pos.y - vertices[x + y * w].Pos.y;
+					n.x = mLandVertices[x + y * w - 1].Pos.y - mLandVertices[x + y * w].Pos.y;
 				}
 				XMVECTOR unitNormal = XMVector3Normalize(XMLoadFloat3(&n));
-				DirectX::XMStoreFloat3(&vertices[x + y * w].Normal, unitNormal);
+				DirectX::XMStoreFloat3(&mLandVertices[x + y * w].Normal, unitNormal);
 			}
 			if (y == 0)
 			{
@@ -994,23 +1046,28 @@ void MyApp::BuildLandGeometry()
 			}
 		}
 
+		for (const auto& O : unregisted_color)
+		{
+			dex2rgb(r, g, b, O.first);
+			OutputDebugStringA(("Unregisted Color (" + std::to_string(r) + ", " + std::to_string(g) + ", " + std::to_string(b) + ") x " + std::to_string(O.second.second) + " : It looks like (" + std::to_string(O.second.first.x) + ", " + std::to_string(O.second.first.y) + ", " + std::to_string(O.second.first.z) + ")\n").c_str());
+		}
 
 		concurrency::parallel_for((size_t)1, h - 1, [&](size_t i)
 		{
 			for (size_t j = 1; j < w - 1; ++j)
 			{
-				float l = vertices[i*w + j - 1].Pos.y;
-				float r = vertices[i*w + j + 1].Pos.y;
-				float t = vertices[(i - 1)*w + j].Pos.y;
-				float b = vertices[(i + 1)*w + j].Pos.y;
-				vertices[j + i * w].Normal.x = -r + l;
-				vertices[j + i * w].Normal.y = 2.0f*1.0f;
-				vertices[j + i * w].Normal.z = b - t;
+				float l = mLandVertices[i*w + j - 1].Pos.y;
+				float r = mLandVertices[i*w + j + 1].Pos.y;
+				float t = mLandVertices[(i - 1)*w + j].Pos.y;
+				float b = mLandVertices[(i + 1)*w + j].Pos.y;
+				mLandVertices[j + i * w].Normal.x = -r + l;
+				mLandVertices[j + i * w].Normal.y = 2.0f*1.0f;
+				mLandVertices[j + i * w].Normal.z = b - t;
 
-				XMVECTOR n = XMVector3Normalize(XMLoadFloat3(&vertices[j + i * w].Normal));
-				DirectX::XMStoreFloat3(&vertices[j + i * w].Normal, n);
+				XMVECTOR n = XMVector3Normalize(XMLoadFloat3(&mLandVertices[j + i * w].Normal));
+				DirectX::XMStoreFloat3(&mLandVertices[j + i * w].Normal, n);
 
-				//vertices[i*w + j]. = XMFLOAT3(2.0f*mSpatialStep, r - l, 0.0f);
+				//mLandVertices[i*w + j]. = XMFLOAT3(2.0f*mSpatialStep, r - l, 0.0f);
 				//XMVECTOR T = XMVector3Normalize(XMLoadFloat3(&mTangentX[i*mNumCols + j]));
 				//XMStoreFloat3(&mTangentX[i*mNumCols + j], T);
 			}
@@ -1035,8 +1092,8 @@ void MyApp::BuildLandGeometry()
 
 			}
 		}
-		OutputDebugStringA(("Vertext Size, Indices Size = " + std::to_string(vertices.size()) + " : " + std::to_string(indices.size()) + "\n").c_str());
-		const UINT vbByteSize = (UINT)vertices.size() * sizeof(VertexForProvince);
+		OutputDebugStringA(("Vertext Size, Indices Size = " + std::to_string(mLandVertices.size()) + " : " + std::to_string(indices.size()) + "\n").c_str());
+		const UINT vbByteSize = (UINT)mLandVertices.size() * sizeof(VertexForProvince);
 
 		const UINT ibByteSize = (UINT)indices.size() * sizeof(std::uint16_t);
 
@@ -1044,13 +1101,13 @@ void MyApp::BuildLandGeometry()
 		geo->Name = "landGeo";
 
 		ThrowIfFailed(D3DCreateBlob(vbByteSize, &geo->VertexBufferCPU));
-		CopyMemory(geo->VertexBufferCPU->GetBufferPointer(), vertices.data(), vbByteSize);
+		CopyMemory(geo->VertexBufferCPU->GetBufferPointer(), mLandVertices.data(), vbByteSize);
 
 		ThrowIfFailed(D3DCreateBlob(ibByteSize, &geo->IndexBufferCPU));
 		CopyMemory(geo->IndexBufferCPU->GetBufferPointer(), indices.data(), ibByteSize);
 
 		geo->VertexBufferGPU = d3dUtil::CreateDefaultBuffer(md3dDevice.Get(),
-			mCommandList.Get(), vertices.data(), vbByteSize, geo->VertexBufferUploader);
+			mCommandList.Get(), mLandVertices.data(), vbByteSize, geo->VertexBufferUploader);
 
 		geo->IndexBufferGPU = d3dUtil::CreateDefaultBuffer(md3dDevice.Get(),
 			mCommandList.Get(), indices.data(), ibByteSize, geo->IndexBufferUploader);
@@ -1315,7 +1372,7 @@ void MyApp::BuildMaterials()
 	water->Name = "water";
 	water->MatCBIndex = 1;
 	water->DiffuseSrvHeapIndex = 1;
-	water->DiffuseAlbedo = XMFLOAT4(0.3f, 0.5f, 1.0f, 0.85f);
+	water->DiffuseAlbedo = XMFLOAT4(0.3f, 0.5f, 1.0f, 0.45f);
 	water->FresnelR0 = XMFLOAT3(0.3f, 0.3f, 0.3f);
 	water->Roughness = 0.0f;
 
@@ -1437,17 +1494,42 @@ void MyApp::BuildRenderItems()
 		mAllRitems.push_back(std::move(newboxRitem_u));
 	}
 
+	/*for (size_t a = 0; a < map_w; ++a)
+	{
+		for (size_t b = 0; b < map_h; ++b)
+		{
+			const auto& P = mLandVertices.at(a + b * map_w);
+			OutputDebugStringA(("(" + std::to_string(a) + ", " + std::to_string(b) + ") => (" + std::to_string(P.Pos.x + (map_w - 1.f) / 2.f) + ", " + std::to_string(P.Pos.z + (map_h - 1.f) / 2.f) + ")\n").c_str());
+		}
+	}*/
+
 	for (const auto& O : prov_stack)
 	{
 		auto newboxRitem = boxRitem;
 		auto newboxRitem_u = std::make_unique<RenderItem>(newboxRitem);
 
+		
+		int x = (int)(1.f * O.second.px / O.second.p_num + (map_w - 1.f) / 2.f);
+		int y = (int)(1.f * O.second.pz / O.second.p_num + (map_h - 1.f) / 2.f);
+
+
+		//int x = std::roundf(2.f * O.second.px / O.second.p_num + (map_w - 1) / 2.f);
+		//int y = std::roundf(2.f * O.second.pz / O.second.p_num + (map_h - 1) / 2.f);
+		
 		newboxRitem_u->ObjCBIndex = all_CBIndex++;
-		XMStoreFloat4x4(&newboxRitem_u->World,
-			XMMatrixTranslation(2.f * O.second.px / O.second.p_num, 2.f * O.second.py / O.second.p_num + 1.0f	, 2.f * O.second.pz / O.second.p_num)
-			+
-			XMMatrixScaling(5.0f, 1.0f, 5.0f) 
-		);
+
+		if (x >= 0 && x < map_w && y >= 0 && y < map_h)
+		{
+			//OutputDebugStringA((std::to_string(mLandVertices.at(x + map_w * y).Pos.x - 2.f * O.second.px / O.second.p_num) + " ; " + std::to_string(mLandVertices.at(x + map_w * y).Pos.z - 2.f * O.second.pz / O.second.p_num) + "\n").c_str());
+			XMStoreFloat4x4(&newboxRitem_u->World,
+				XMMatrixTranslation(
+					2.f * O.second.px / O.second.p_num,
+					2.f * mLandVertices.at(x + map_w * y).Pos.y - 2.f,
+					2.f * O.second.pz / O.second.p_num)
+				+
+				XMMatrixScaling(5.0f, 5.0f, 5.0f)
+			);
+		}
 
 		mRitemLayer[(int)RenderLayer::Opaque].push_back(newboxRitem_u.get());
 		mAllRitems.push_back(std::move(newboxRitem_u));

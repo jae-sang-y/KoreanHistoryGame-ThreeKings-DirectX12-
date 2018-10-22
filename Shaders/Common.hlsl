@@ -14,6 +14,7 @@ struct VertexOut
 	float3 NormalW : NORMAL;
 	float2 TexC    : TEXCOORD;
 	float4 Prov : PROVCOLOR;
+	float4 SubProv : SUBPROVCOLOR;
 };
 
 struct GSOutput
@@ -23,4 +24,5 @@ struct GSOutput
 	float3 NormalW : NORMAL;
 	float2 TexC    : TEXCOORD;
 	float4 Prov : PROVCOLOR;
+	float4 SubProv : SUBPROVCOLOR;
 };
