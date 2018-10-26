@@ -4,7 +4,12 @@
 #include "Common/MathHelper.h"
 #include "Common/UploadBuffer.h"
 
-const int maxProvince = 256;
+
+using ProvinceId = std::uint64_t;
+using NationId = std::uint64_t;
+using Color32 = std::uint32_t;
+
+const ProvinceId maxProvince = 256;
 
 struct ObjectConstants
 {
@@ -56,8 +61,8 @@ struct VertexForProvince
 	DirectX::XMFLOAT3 Pos;
 	DirectX::XMFLOAT3 Normal;
 	DirectX::XMFLOAT2 TexC;
-	unsigned int Prov;
-	unsigned int SubProv;
+	ProvinceId Prov;
+	ProvinceId SubProv;
 };
 
 // Stores the resources needed for the CPU to build the command lists

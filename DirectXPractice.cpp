@@ -17,9 +17,6 @@ using Microsoft::WRL::ComPtr;
 using namespace DirectX;
 using namespace DirectX::PackedVector;
 
-using ProvinceId = std::uint64_t;
-using NationId = std::uint64_t;
-using Color32 = std::uint32_t;
 
 
 const int gNumFrameResources = 3;
@@ -119,6 +116,10 @@ private:
 	std::array<const CD3DX12_STATIC_SAMPLER_DESC, 6> GetStaticSamplers();
 	void UILayerInitialize(ID3D12Device* pDevice, ID3D12CommandQueue* pCommandQueue);
 	void UILayerResize(ComPtr<ID3D12Resource>* ppRenderTargets, UINT width, UINT height);
+	void GameInit();
+	void GameUpdate();
+	void GameStep();
+	void ProvinceMousedown(WPARAM btnState, ProvinceId id);
 private:
 
     UINT mCbvSrvDescriptorSize = 0;
@@ -165,12 +166,20 @@ private:
     POINT mLastMousePos;
 	RenderItem* mPickedRitem = nullptr;
 
+	struct {
+		std::wstring DebugText = L"선택 되지 않음";
+		NationId nationPick = 0;
+	} mUser;
+
+
 	struct Province {
 		std::string name;
 		Color32 color;
 		std::uint64_t p_num = 1;
 		float px, py, pz;
 		float ty;
+
+
 		bool is_rebel = false;
 		NationId owner = 0;
 
@@ -182,6 +191,16 @@ private:
 		}
 	};
 	std::unordered_map<ProvinceId, Province> prov_stack;
+	using WCHAR3 = WCHAR[3];
+	struct Nation
+	{	
+		XMFLOAT4 MainColor = { 0.f, 0.f, 0.f, 0.f };
+		std::wstring MainName = L"오류";
+
+
+	};
+
+	std::unordered_map<NationId, Nation*>  nations;
 };
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE prevInstance, PSTR cmdLine, int showCmd)
@@ -250,6 +269,8 @@ bool MyApp::Initialize()
     // Wait until initialization is complete.
     FlushCommandQueue();
 
+	GameInit();
+
     return true;
 }
  
@@ -261,6 +282,7 @@ void MyApp::OnResize()
     XMMATRIX P = XMMatrixPerspectiveFovLH(0.25f*MathHelper::Pi, AspectRatio(), 1.0f, 1000.0f);
     XMStoreFloat4x4(&mProj, P);
 }
+
 
 void MyApp::Update(const GameTimer& gt)
 {
@@ -287,8 +309,157 @@ void MyApp::Update(const GameTimer& gt)
 	UpdateMainPassCB(gt);
     UpdateWaves(gt);
 	LoadSizeDependentResources();
+	GameUpdate();
 }
 
+void MyApp::Draw(const GameTimer& gt)
+{
+	auto cmdListAlloc = mCurrFrameResource->CmdListAlloc;
+
+	ThrowIfFailed(cmdListAlloc->Reset());
+
+	ThrowIfFailed(mCommandList->Reset(cmdListAlloc.Get(), mPSOs["opaque"].Get()));
+
+	mCommandList->RSSetViewports(1, &mScreenViewport);
+	mCommandList->RSSetScissorRects(1, &mScissorRect);
+
+	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(CurrentBackBuffer(),
+		D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET));
+
+	mCommandList->ClearRenderTargetView(CurrentBackBufferView(), (float*)&mMainPassCB.FogColor, 0, nullptr);
+	mCommandList->ClearDepthStencilView(DepthStencilView(), D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 1.0f, 0, 0, nullptr);
+
+	mCommandList->OMSetRenderTargets(1, &CurrentBackBufferView(), true, &DepthStencilView());
+
+	ID3D12DescriptorHeap* descriptorHeaps[] = { mSrvDescriptorHeap.Get() };
+	mCommandList->SetDescriptorHeaps(_countof(descriptorHeaps), descriptorHeaps);
+
+	mCommandList->SetGraphicsRootSignature(mRootSignature.Get());
+
+	auto passCB = mCurrFrameResource->PassCB->Resource();
+	mCommandList->SetGraphicsRootConstantBufferView(2, passCB->GetGPUVirtualAddress());
+
+	DrawRenderItems(mCommandList.Get(), mRitemLayer[(int)RenderLayer::Opaque]);
+
+	mCommandList->SetPipelineState(mPSOs["alphaTested"].Get());
+	DrawRenderItems(mCommandList.Get(), mRitemLayer[(int)RenderLayer::AlphaTested]);
+
+	mCommandList->SetPipelineState(mPSOs["province"].Get());
+	DrawRenderItems(mCommandList.Get(), mRitemLayer[(int)RenderLayer::Province]);
+
+	mCommandList->SetPipelineState(mPSOs["transparent"].Get());
+	DrawRenderItems(mCommandList.Get(), mRitemLayer[(int)RenderLayer::Transparent]);
+
+	ThrowIfFailed(mCommandList->Close());
+
+	ID3D12CommandList* cmdsLists[] = { mCommandList.Get() };
+	mCommandQueue->ExecuteCommandLists(_countof(cmdsLists), cmdsLists);
+
+
+	{
+		int m_frameIndex = mCurrBackBuffer;
+		ID3D11Resource* ppResources[] = { m_wrappedRenderTargets[m_frameIndex].Get() };
+
+		m_d2dDeviceContext->SetTarget(m_d2dRenderTargets[m_frameIndex].Get());
+
+		m_d3d11On12Device->AcquireWrappedResources(ppResources, _countof(ppResources));
+		m_d2dDeviceContext->BeginDraw();
+
+		m_d2dDeviceContext->DrawText(mUser.DebugText.c_str(), mUser.DebugText.length(), m_textFormat.Get(), D2D1::RectF(30.0f, 30.0f, 300.f, 100.f), m_textBrush.Get());
+
+		m_d2dDeviceContext->EndDraw();
+		m_d3d11On12Device->ReleaseWrappedResources(ppResources, _countof(ppResources));
+
+		m_d3d11DeviceContext->Flush();
+
+	}
+	ThrowIfFailed(mSwapChain->Present(0, 0));
+	mCurrBackBuffer = (mCurrBackBuffer + 1) % SwapChainBufferCount;
+
+	mCurrFrameResource->Fence = ++mCurrentFence;
+
+	mCommandQueue->Signal(mFence.Get(), mCurrentFence);
+}
+
+void MyApp::GameInit()
+{
+	NationId nation_count = 0;
+	{
+		std::unique_ptr<Nation> 신라 = std::make_unique<Nation>();
+		신라->MainColor = XMFLOAT4(1.0f, 1.0f, 0.2f, 1.f);
+		신라->MainName = L"신라";
+		nations[++nation_count] = 신라.get();
+
+		std::unique_ptr<Nation> 백제 = std::make_unique<Nation>();
+		백제->MainColor = XMFLOAT4(0.2f, 1.0f, 0.9f, 1.f);
+		신라->MainName = L"백제";
+		nations[++nation_count] = 백제.get();
+
+		std::unique_ptr<Nation> 고구려 = std::make_unique<Nation>();
+		고구려->MainColor = XMFLOAT4(0.8f, 0.0f, 0.0f, 1.f);
+		신라->MainName = L"고구려";
+		nations[++nation_count] = 고구려.get();
+	}
+
+
+}
+void MyApp::GameUpdate()
+{
+	for (const auto& O : prov_stack)
+	{
+		mMainPassCB.gSubProv[O.first] = XMFLOAT4(0.2f, 0.f, 0.f, 1.f);
+		mMainPassCB.gProv[O.first] = { 0.f,0.f,0.f,0.f };
+		
+		if (auto P = nations.find(O.second.owner); P != nations.end())
+		{
+			mMainPassCB.gProv[O.first] = P->second->MainColor;
+		}
+		mMainPassCB.gSubProv[O.first] = O.second.is_rebel ? XMFLOAT4(0.2f, 0.f, 0.f, 1.f) : mMainPassCB.gProv[O.first];
+	}
+
+	mMainPassCB.gProv[0] = { 0.f, 0.f, 0.f, 0.f };
+	mMainPassCB.gSubProv[0] = mMainPassCB.gProv[0];	
+
+	mUser.DebugText = std::to_wstring(nations.size());
+}
+
+void MyApp::ProvinceMousedown(WPARAM btnState, ProvinceId id)
+{
+	auto prov = prov_stack.find(id);
+	if (prov == prov_stack.end())
+		return;
+	if (btnState & MK_LBUTTON)
+	{
+		mUser.DebugText = std::to_wstring(id);
+		prov->second.is_rebel = true;
+		return;
+	}
+	if (btnState & MK_RBUTTON)
+	{
+		mUser.nationPick = prov->second.owner;
+
+		if (auto& O = nations.find(id); O != nations.end())
+		{
+			mUser.DebugText = O->second->MainName;
+		}
+		else
+		{
+			mUser.DebugText = L"미개인";
+		}
+		return;
+	}
+	if (btnState & MK_MBUTTON)
+	{
+		//mUser.nationPick = prov->second.owner;
+
+		size_t flow = rand() % nations.size();
+		auto key = std::next(std::begin(nations), flow);
+
+		//prov->second.owner = key->first;
+		mUser.DebugText = key->second->MainName;
+		return;
+	}
+}
 
 void MyApp::LoadSizeDependentResources()
 {
@@ -454,87 +625,6 @@ void MyApp::UILayerInitialize(ID3D12Device* pDevice, ID3D12CommandQueue* pComman
 	}
 }
 
-void MyApp::Draw(const GameTimer& gt)
-{
-	auto cmdListAlloc = mCurrFrameResource->CmdListAlloc;
-
-	// Reuse the memory associated with command recording.
-	// We can only reset when the associated command lists have finished execution on the GPU.
-	ThrowIfFailed(cmdListAlloc->Reset());
-
-	// A command list can be reset after it has been added to the command queue via ExecuteCommandList.
-	// Reusing the command list reuses memory.
-	ThrowIfFailed(mCommandList->Reset(cmdListAlloc.Get(), mPSOs["opaque"].Get()));
-
-	mCommandList->RSSetViewports(1, &mScreenViewport);
-	mCommandList->RSSetScissorRects(1, &mScissorRect);
-
-	// Indicate a state transition on the resource usage.
-	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(CurrentBackBuffer(),
-		D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET));
-
-	// Clear the back buffer and depth buffer.
-	mCommandList->ClearRenderTargetView(CurrentBackBufferView(), (float*)&mMainPassCB.FogColor, 0, nullptr);
-	mCommandList->ClearDepthStencilView(DepthStencilView(), D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 1.0f, 0, 0, nullptr);
-
-	// Specify the buffers we are going to render to.
-	mCommandList->OMSetRenderTargets(1, &CurrentBackBufferView(), true, &DepthStencilView());
-
-	ID3D12DescriptorHeap* descriptorHeaps[] = { mSrvDescriptorHeap.Get() };
-	mCommandList->SetDescriptorHeaps(_countof(descriptorHeaps), descriptorHeaps);
-
-	mCommandList->SetGraphicsRootSignature(mRootSignature.Get());
-
-	auto passCB = mCurrFrameResource->PassCB->Resource();
-	mCommandList->SetGraphicsRootConstantBufferView(2, passCB->GetGPUVirtualAddress());
-
-	DrawRenderItems(mCommandList.Get(), mRitemLayer[(int)RenderLayer::Opaque]);
-
-	mCommandList->SetPipelineState(mPSOs["alphaTested"].Get());
-	DrawRenderItems(mCommandList.Get(), mRitemLayer[(int)RenderLayer::AlphaTested]);
-
-	mCommandList->SetPipelineState(mPSOs["province"].Get());
-	DrawRenderItems(mCommandList.Get(), mRitemLayer[(int)RenderLayer::Province]);
-
-	mCommandList->SetPipelineState(mPSOs["transparent"].Get());
-	DrawRenderItems(mCommandList.Get(), mRitemLayer[(int)RenderLayer::Transparent]);
-
-	ThrowIfFailed(mCommandList->Close());
-
-	ID3D12CommandList* cmdsLists[] = { mCommandList.Get() };
-	mCommandQueue->ExecuteCommandLists(_countof(cmdsLists), cmdsLists);
-
-
-	{
-		int m_frameIndex = mCurrBackBuffer;
-		ID3D11Resource* ppResources[] = { m_wrappedRenderTargets[m_frameIndex].Get() };
-
-		m_d2dDeviceContext->SetTarget(m_d2dRenderTargets[m_frameIndex].Get());
-
-		m_d3d11On12Device->AcquireWrappedResources(ppResources, _countof(ppResources));
-		m_d2dDeviceContext->BeginDraw();
-		
-		m_d2dDeviceContext->DrawText(L"Hello Wrold", 10U, m_textFormat.Get(), D2D1::RectF(30.0f, 30.0f, 300.f, 100.f), m_textBrush.Get());
-
-		m_d2dDeviceContext->EndDraw();
-		m_d3d11On12Device->ReleaseWrappedResources(ppResources, _countof(ppResources));
-
-		m_d3d11DeviceContext->Flush();
-
-	}
-    // Swap the back and front buffers
-    ThrowIfFailed(mSwapChain->Present(0, 0));
-	mCurrBackBuffer = (mCurrBackBuffer + 1) % SwapChainBufferCount;
-
-    // Advance the fence value to mark commands up to this fence point.
-    mCurrFrameResource->Fence = ++mCurrentFence;
-
-
-    // Add an instruction to the command queue to set a new fence point. 
-    // Because we are on the GPU timeline, the new fence point won't be 
-    // set until the GPU finishes processing all the commands prior to this Signal().
-    mCommandQueue->Signal(mFence.Get(), mCurrentFence);
-}
 
 void MyApp::OnMouseDown(WPARAM btnState, int x, int y)
 {
@@ -618,23 +708,8 @@ void MyApp::Pick(WPARAM btnState, int sx, int sy)
 			#pragma endregion
 			if (lastPick != 0)
 			{
-				if (btnState & MK_LBUTTON)
-				{
-					mCursorProvince = vertices[lastPick].Prov;
-					if (auto& O = prov_stack.find(vertices[lastPick].Prov); O != prov_stack.end())
-					{
-						O->second.is_rebel = !O->second.is_rebel;
-					}
-				}
-				if (btnState & MK_RBUTTON)
-				{
-					mCursorProvince = vertices[lastPick].Prov;
-					if (auto& O = prov_stack.find(vertices[lastPick].Prov); O != prov_stack.end())
-					{
-						O->second.owner = (O->second.owner + 1) % 4;
-					}
-				}
-
+				mCursorProvince = vertices[lastPick].Prov;
+				ProvinceMousedown(btnState, vertices[lastPick].Prov);
 			}
 		}
 
@@ -817,30 +892,6 @@ void MyApp::UpdateMainPassCB(const GameTimer& gt)
 	float time = 0.f;// fmodf(mTimer.TotalTime() / 3.f + 0.f, 20.f) - 10.f;
 
 	mMainPassCB.Lights[0].Direction = { time , -0.57735f, 0.57735f };
-	
-	std::unordered_map<NationId, XMFLOAT4> colors;
-
-	colors.insert(std::make_pair(1, XMFLOAT4(1.0f, 1.0f, 0.2f, 1.f)));
-	colors.insert(std::make_pair(2, XMFLOAT4(0.2f, 1.0f, 0.9f, 1.f)));
-	colors.insert(std::make_pair(3, XMFLOAT4(0.8f, 0.0f, 0.0f, 1.f)));
-
-	for (const auto& O : prov_stack)
-	{
-		if (auto P = colors.find(O.second.owner); P != colors.end())
-		{
-			mMainPassCB.gProv[O.first] = P->second;
-		}
-		else
-		{
-			mMainPassCB.gProv[O.first] = { 0.f,0.f,0.f,0.f };
-		}
-		//{ ((O.second.color & 16711680) / 65536) / 255.f,((O.second.color & 65208) / 256) / 255.f, (O.second.color & 255) / 255.f, 0.5f };
-		mMainPassCB.gSubProv[O.first] = O.second.is_rebel ? XMFLOAT4(0.2f, 0.f, 0.f, 1.f) : mMainPassCB.gProv[O.first];
-	}
-
-	mMainPassCB.gProv[0] = { 0.f, 0.f, 0.f, 0.f };
-	mMainPassCB.gSubProv[0] = mMainPassCB.gProv[0];
-	
 	
 	
 	mMainPassCB.Lights[0].Strength = { MathHelper::Clamp(2.f - powf(time / 4, 2), 0.f, 1.f), MathHelper::Clamp(1.5f - powf(time / 4, 2), 0.f, 1.f), MathHelper::Clamp(1.f - powf(time / 4, 2), 0.f, 1.f) };
