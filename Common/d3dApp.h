@@ -9,13 +9,35 @@
 #include <crtdbg.h>
 #endif
 
+#ifdef PIXSUPPORT
+#include <dxgi1_4.h>
+#else
+#define USE_DXGI_1_6
+#include <dxgi1_6.h>
+#endif
+#include <d3d12.h>
+#include <d2d1_3.h>
+#include <D3Dcompiler.h>
+#include <dwrite.h>
+#include <d3d11on12.h>
+#include <DirectXMath.h>	
+#include <dxgidebug.h>
+
 #include "d3dUtil.h"
 #include "GameTimer.h"
+#include "B:/Project/DirectXPractice/FrameResource.h"
 
 // Link necessary d3d12 libraries.
 #pragma comment(lib,"d3dcompiler.lib")
 #pragma comment(lib, "D3D12.lib")
 #pragma comment(lib, "dxgi.lib")
+#pragma comment(lib, "dxguid.lib")
+#pragma comment(lib, "d3dcompiler.lib")
+#pragma comment(lib, "D3D12.lib")
+#pragma comment(lib, "dwrite")
+#pragma comment(lib, "D3D11.lib")
+#pragma comment(lib, "D2D1.lib")
+
 
 class D3DApp
 {
@@ -72,6 +94,7 @@ protected:
     void LogAdapters();
     void LogAdapterOutputs(IDXGIAdapter* adapter);
     void LogOutputDisplayModes(IDXGIOutput* output, DXGI_FORMAT format);
+	void D3DApp::GetGPUAdapter(UINT adapterIndex, IDXGIAdapter1** ppAdapter);
 
 protected:
 
@@ -92,7 +115,7 @@ protected:
 	// Used to keep track of the “delta-time?and game time (?.4).
 	GameTimer mTimer;
 	
-    Microsoft::WRL::ComPtr<IDXGIFactory4> mdxgiFactory;
+    Microsoft::WRL::ComPtr<IDXGIFactory6> mdxgiFactory;
     Microsoft::WRL::ComPtr<IDXGISwapChain> mSwapChain;
     Microsoft::WRL::ComPtr<ID3D12Device> md3dDevice;
 
@@ -125,5 +148,33 @@ protected:
     DXGI_FORMAT mDepthStencilFormat = DXGI_FORMAT_D24_UNORM_S8_UINT;
 	int mClientWidth = 800;
 	int mClientHeight = 600;
+
+	Microsoft::WRL::ComPtr<ID3D11DeviceContext> m_d3d11DeviceContext;
+	Microsoft::WRL::ComPtr<ID3D11On12Device> m_d3d11On12Device;
+	Microsoft::WRL::ComPtr<IDWriteFactory> m_dwriteFactory;
+	Microsoft::WRL::ComPtr<ID2D1Factory3> m_d2dFactory;
+	Microsoft::WRL::ComPtr<ID2D1Device2> m_d2dDevice;
+	Microsoft::WRL::ComPtr<ID2D1DeviceContext2> m_d2dDeviceContext;
+	std::vector<Microsoft::WRL::ComPtr<ID3D11Resource>> m_wrappedRenderTargets;
+	std::vector<Microsoft::WRL::ComPtr<ID2D1Bitmap1>> m_d2dRenderTargets;
+	Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> m_textBrush;
+	Microsoft::WRL::ComPtr<IDWriteTextFormat> m_textFormat;
+
+	bool uiFirst = true;
+
+	struct DxgiAdapterInfo
+	{
+		DXGI_ADAPTER_DESC1 desc;
+		bool supportsDx12FL11;
+	};
+	DXGI_GPU_PREFERENCE m_activeGpuPreference = DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE;
+	std::vector<DxgiAdapterInfo> m_gpuAdapterDescs;
+	UINT m_activeAdapter;
+	LUID m_activeAdapterLuid;
+
+	std::vector<std::unique_ptr<FrameResource>> mFrameResources;
+	FrameResource* mCurrFrameResource = nullptr;
+	int mCurrFrameResourceIndex = 0;
+
 };
 

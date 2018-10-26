@@ -149,11 +149,37 @@ void D3DApp::OnResize()
 
     ThrowIfFailed(mCommandList->Reset(mDirectCmdListAlloc.Get(), nullptr));
 
-	// Release the previous resources we will be recreating.
 	for (int i = 0; i < SwapChainBufferCount; ++i)
+	{
 		mSwapChainBuffer[i].Reset();
+		//mFrameResources[i]->ReleaseSizeDependentResources();
+	}
+	if (!uiFirst)
+	{
+		for (UINT i = 0; i < m_wrappedRenderTargets.size(); i++)
+		{
+			ID3D11Resource* ppResources[] = { m_wrappedRenderTargets[i].Get() };
+			m_d3d11On12Device->ReleaseWrappedResources(ppResources, _countof(ppResources));
+		}
+		m_d2dDeviceContext->SetTarget(nullptr);
+		m_d3d11DeviceContext->Flush();
+		for (UINT i = 0; i < m_wrappedRenderTargets.size(); i++)
+		{
+			m_d2dRenderTargets[i].Reset();
+			m_wrappedRenderTargets[i].Reset();
+		}
+		m_textBrush.Reset();
+		m_d2dDeviceContext.Reset();
+		m_textFormat.Reset();
+		m_dwriteFactory.Reset();
+		m_d2dDevice.Reset();
+		m_d2dFactory.Reset();
+		m_d3d11DeviceContext.Reset();
+		m_d3d11On12Device.Reset();
+	}
+	uiFirst = false;
     mDepthStencilBuffer.Reset();
-	
+
 	// Resize the swap chain.
     ThrowIfFailed(mSwapChain->ResizeBuffers(
 		SwapChainBufferCount, 
@@ -180,11 +206,6 @@ void D3DApp::OnResize()
     depthStencilDesc.DepthOrArraySize = 1;
     depthStencilDesc.MipLevels = 1;
 
-	// Correction 11/12/2016: SSAO chapter requires an SRV to the depth buffer to read from 
-	// the depth buffer.  Therefore, because we need to create two views to the same resource:
-	//   1. SRV format: DXGI_FORMAT_R24_UNORM_X8_TYPELESS
-	//   2. DSV Format: DXGI_FORMAT_D24_UNORM_S8_UINT
-	// we need to create the depth buffer resource with a typeless format.  
 	depthStencilDesc.Format = DXGI_FORMAT_R24G8_TYPELESS;
 
     depthStencilDesc.SampleDesc.Count = m4xMsaaState ? 4 : 1;
@@ -416,6 +437,29 @@ bool D3DApp::InitMainWindow()
 	return true;
 }
 
+void D3DApp::GetGPUAdapter(
+	UINT adapterIndex,
+	IDXGIAdapter1** ppAdapter)
+{
+	ComPtr<IDXGIAdapter1> adapter;
+	*ppAdapter = nullptr;
+#ifdef USE_DXGI_1_6
+	if (mdxgiFactory->EnumAdapterByGpuPreference(adapterIndex, m_activeGpuPreference, IID_PPV_ARGS(&adapter)) != DXGI_ERROR_NOT_FOUND)
+#else
+	if (mdxgiFactory->EnumAdapters1(adapterIndex, &adapter) != DXGI_ERROR_NOT_FOUND)
+#endif
+	{
+		DXGI_ADAPTER_DESC1 desc;
+		ThrowIfFailed(adapter->GetDesc1(&desc));
+
+		// Check to see if the adapter supports Direct3D 12.
+		ThrowIfFailed(D3D12CreateDevice(adapter.Get(), D3D_FEATURE_LEVEL_11_0, _uuidof(ID3D12Device), nullptr));
+
+		*ppAdapter = adapter.Detach();
+	}
+}
+
+
 bool D3DApp::InitDirect3D()
 {
 #if defined(DEBUG) || defined(_DEBUG) 
@@ -436,15 +480,41 @@ bool D3DApp::InitDirect3D()
 		IID_PPV_ARGS(&md3dDevice));
 
 	// Fallback to WARP device.
-	if(FAILED(hardwareResult))
+	if (FAILED(hardwareResult))
 	{
-		ComPtr<IDXGIAdapter> pWarpAdapter;
+		/*ComPtr<IDXGIAdapter> pWarpAdapter;
 		ThrowIfFailed(mdxgiFactory->EnumWarpAdapter(IID_PPV_ARGS(&pWarpAdapter)));
 
 		ThrowIfFailed(D3D12CreateDevice(
 			pWarpAdapter.Get(),
 			D3D_FEATURE_LEVEL_11_0,
-			IID_PPV_ARGS(&md3dDevice)));
+			IID_PPV_ARGS(&md3dDevice)));*/
+
+
+		m_gpuAdapterDescs.clear();
+
+		ComPtr<IDXGIAdapter1> adapter;
+#ifdef USE_DXGI_1_6
+		for (UINT adapterIndex = 0; DXGI_ERROR_NOT_FOUND != mdxgiFactory->EnumAdapterByGpuPreference(adapterIndex, DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE, IID_PPV_ARGS(&adapter)); ++adapterIndex)
+#else
+		for (UINT adapterIndex = 0; DXGI_ERROR_NOT_FOUND != mdxgiFactory->EnumAdapters1(adapterIndex, &adapter); ++adapterIndex)
+#endif
+		{
+			DxgiAdapterInfo adapterInfo;
+			ThrowIfFailed(adapter->GetDesc1(&adapterInfo.desc));
+			adapterInfo.supportsDx12FL11 = SUCCEEDED(D3D12CreateDevice(adapter.Get(), D3D_FEATURE_LEVEL_11_0, _uuidof(ID3D12Device), nullptr));
+			m_gpuAdapterDescs.push_back(move(adapterInfo));
+		}
+
+
+		ComPtr<IDXGIAdapter1> hardwareAdapter;
+		GetGPUAdapter(m_activeAdapter, &hardwareAdapter);
+		ThrowIfFailed(D3D12CreateDevice(
+			hardwareAdapter.Get(),
+			D3D_FEATURE_LEVEL_11_0,
+			IID_PPV_ARGS(&md3dDevice)
+		));
+		m_activeAdapterLuid = m_gpuAdapterDescs[m_activeAdapter].desc.AdapterLuid;
 	}
 
 	ThrowIfFailed(md3dDevice->CreateFence(0, D3D12_FENCE_FLAG_NONE,
