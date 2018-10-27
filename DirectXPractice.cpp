@@ -46,7 +46,7 @@ struct RenderItem
 	int NumFramesDirty = gNumFrameResources;
 
 	// Index into GPU constant buffer corresponding to the ObjectCB for this render item.
-	UINT ObjCBIndex = -1;
+	UINT ObjCBIndex = 0xFFFFFFFF;
 
 	Material* Mat = nullptr;
 	MeshGeometry* Geo = nullptr;
@@ -160,11 +160,8 @@ private:
 
 	size_t map_w = 0;
 	size_t map_h = 0;
-
-	size_t mCursorProvince = 1;
-
+	
     POINT mLastMousePos;
-	RenderItem* mPickedRitem = nullptr;
 
 	struct {
 		std::wstring DebugText = L"선택 되지 않음";
@@ -182,6 +179,7 @@ private:
 
 		bool is_rebel = false;
 		NationId owner = 0;
+		NationId ruler = 0;
 
 		Province()
 		{
@@ -200,7 +198,13 @@ private:
 
 	};
 
-	std::unordered_map<NationId, Nation*>  nations;
+	XMVECTOR mEyetarget = XMVectorSet(0.0f, 15.0f, 0.0f, 0.0f);
+
+	std::unordered_map<NationId, std::unique_ptr<Nation>>  nations;
+	std::unordered_map<std::wstring, std::wstring> captions;
+
+	float mEyeMoveX = 0.f;
+	float mEyeMoveZ = 0.f;
 };
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE prevInstance, PSTR cmdLine, int showCmd)
@@ -323,13 +327,13 @@ void MyApp::Draw(const GameTimer& gt)
 	mCommandList->RSSetViewports(1, &mScreenViewport);
 	mCommandList->RSSetScissorRects(1, &mScissorRect);
 
-	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(CurrentBackBuffer(),
-		D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET));
+	mCommandList->ResourceBarrier(1, new CD3DX12_RESOURCE_BARRIER(CD3DX12_RESOURCE_BARRIER::Transition(CurrentBackBuffer(),
+		D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET)));
 
 	mCommandList->ClearRenderTargetView(CurrentBackBufferView(), (float*)&mMainPassCB.FogColor, 0, nullptr);
 	mCommandList->ClearDepthStencilView(DepthStencilView(), D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 1.0f, 0, 0, nullptr);
 
-	mCommandList->OMSetRenderTargets(1, &CurrentBackBufferView(), true, &DepthStencilView());
+	mCommandList->OMSetRenderTargets(1, new D3D12_CPU_DESCRIPTOR_HANDLE(CurrentBackBufferView()), true, new D3D12_CPU_DESCRIPTOR_HANDLE(DepthStencilView()));
 
 	ID3D12DescriptorHeap* descriptorHeaps[] = { mSrvDescriptorHeap.Get() };
 	mCommandList->SetDescriptorHeaps(_countof(descriptorHeaps), descriptorHeaps);
@@ -365,7 +369,7 @@ void MyApp::Draw(const GameTimer& gt)
 		m_d3d11On12Device->AcquireWrappedResources(ppResources, _countof(ppResources));
 		m_d2dDeviceContext->BeginDraw();
 
-		m_d2dDeviceContext->DrawText(mUser.DebugText.c_str(), mUser.DebugText.length(), m_textFormat.Get(), D2D1::RectF(30.0f, 30.0f, 300.f, 100.f), m_textBrush.Get());
+		m_d2dDeviceContext->DrawText(mUser.DebugText.c_str(), (UINT32)mUser.DebugText.length(), m_textFormat.Get(), D2D1::RectF(30.0f, 30.0f, 300.f, 100.f), m_textBrush.Get());
 
 		m_d2dDeviceContext->EndDraw();
 		m_d3d11On12Device->ReleaseWrappedResources(ppResources, _countof(ppResources));
@@ -386,19 +390,19 @@ void MyApp::GameInit()
 	NationId nation_count = 0;
 	{
 		std::unique_ptr<Nation> 신라 = std::make_unique<Nation>();
-		신라->MainColor = XMFLOAT4(1.0f, 1.0f, 0.2f, 1.f);
+		신라->MainColor = XMFLOAT4(0.5f, 0.5f, 0.1f, 1.f);
 		신라->MainName = L"신라";
-		nations[++nation_count] = 신라.get();
+		nations[++nation_count] = std::move(신라);
 
 		std::unique_ptr<Nation> 백제 = std::make_unique<Nation>();
-		백제->MainColor = XMFLOAT4(0.2f, 1.0f, 0.9f, 1.f);
-		신라->MainName = L"백제";
-		nations[++nation_count] = 백제.get();
+		백제->MainColor = XMFLOAT4(0.1f, 0.5f, 0.45f, 1.f);
+		백제->MainName = L"백제";
+		nations[++nation_count] = std::move(백제);
 
 		std::unique_ptr<Nation> 고구려 = std::make_unique<Nation>();
-		고구려->MainColor = XMFLOAT4(0.8f, 0.0f, 0.0f, 1.f);
-		신라->MainName = L"고구려";
-		nations[++nation_count] = 고구려.get();
+		고구려->MainColor = XMFLOAT4(0.4f, 0.0f, 0.0f, 1.f);
+		고구려->MainName = L"고구려";
+		nations[++nation_count] = std::move(고구려);
 	}
 
 
@@ -407,20 +411,45 @@ void MyApp::GameUpdate()
 {
 	for (const auto& O : prov_stack)
 	{
-		mMainPassCB.gSubProv[O.first] = XMFLOAT4(0.2f, 0.f, 0.f, 1.f);
+		mMainPassCB.gSubProv[O.first] = XMFLOAT4(0.f, 0.f, 0.f, 0.f);
 		mMainPassCB.gProv[O.first] = { 0.f,0.f,0.f,0.f };
 		
-		if (auto P = nations.find(O.second.owner); P != nations.end())
+		if (const auto& P = nations.find(O.second.owner); P != nations.end())
 		{
 			mMainPassCB.gProv[O.first] = P->second->MainColor;
+			mMainPassCB.gSubProv[O.first] = P->second->MainColor;
 		}
-		mMainPassCB.gSubProv[O.first] = O.second.is_rebel ? XMFLOAT4(0.2f, 0.f, 0.f, 1.f) : mMainPassCB.gProv[O.first];
+		if (const auto& P = nations.find(O.second.ruler); P != nations.end())
+		{
+			mMainPassCB.gSubProv[O.first] = P->second->MainColor;
+		}
 	}
 
 	mMainPassCB.gProv[0] = { 0.f, 0.f, 0.f, 0.f };
 	mMainPassCB.gSubProv[0] = mMainPassCB.gProv[0];	
 
-	mUser.DebugText = std::to_wstring(nations.size());
+	if (captions.size() > 0)
+	{
+		mUser.DebugText = L"";
+		for (const auto& O : captions)
+		{
+			mUser.DebugText += O.first + L" : " + O.second + L"\n";
+		}
+	}
+
+	mEyetarget.m128_f32[0] += mEyeMoveX;
+	mEyetarget.m128_f32[2] += mEyeMoveZ;
+	mEyeMoveX -= mEyeMoveX;
+	mEyeMoveZ -= mEyeMoveZ;
+
+	captions[L"Theta"] = std::to_wstring(mTheta);
+	captions[L"Phi"] = std::to_wstring(mPhi);
+	captions[L"Radius"] = std::to_wstring(mRadius);
+
+
+	captions[L"CamX"] = std::to_wstring(mRadius * sinf(mPhi)*cosf(mTheta));
+	captions[L"CamY"] = std::to_wstring(mRadius * cosf(mPhi));
+	captions[L"CamZ"] = std::to_wstring(mRadius * sinf(mPhi)*sinf(mTheta));
 }
 
 void MyApp::ProvinceMousedown(WPARAM btnState, ProvinceId id)
@@ -428,35 +457,68 @@ void MyApp::ProvinceMousedown(WPARAM btnState, ProvinceId id)
 	auto prov = prov_stack.find(id);
 	if (prov == prov_stack.end())
 		return;
+	captions[L"선택한 프로빈스"] = std::to_wstring(id);
 	if (btnState & MK_LBUTTON)
 	{
-		mUser.DebugText = std::to_wstring(id);
-		prov->second.is_rebel = true;
+		prov->second.owner = mUser.nationPick;
+		prov->second.ruler = mUser.nationPick;
 		return;
 	}
 	if (btnState & MK_RBUTTON)
 	{
-		mUser.nationPick = prov->second.owner;
+		prov->second.ruler = mUser.nationPick;
 
-		if (auto& O = nations.find(id); O != nations.end())
-		{
-			mUser.DebugText = O->second->MainName;
-		}
-		else
-		{
-			mUser.DebugText = L"미개인";
-		}
 		return;
 	}
 	if (btnState & MK_MBUTTON)
 	{
-		//mUser.nationPick = prov->second.owner;
 
-		size_t flow = rand() % nations.size();
-		auto key = std::next(std::begin(nations), flow);
+		if (const auto& O = nations.find(prov->second.owner); O != nations.end())
+		{
+			mUser.nationPick = prov->second.owner;
+			captions[L"선택한 국가"] = O->second->MainName;
+		}
+		else
+		{
+			mUser.nationPick = 0;
+			captions[L"선택한 국가"] = L"미개인";
+		}
 
-		//prov->second.owner = key->first;
-		mUser.DebugText = key->second->MainName;
+		return;
+	}
+}
+
+void MyApp::OnKeyDown(WPARAM btnState)
+{
+	float deltaTime = mTimer.DeltaTime();
+	//bool pressAlt = !keyState.at(VK_MENU);
+	bool pressShift = GetAsyncKeyState(VK_LSHIFT) != 0;
+
+	//bool pressCtrl = !keyState.at(VK_CONTROL);
+
+	if (keyState.at('A'))
+	{
+		mEyeMoveX -= pressShift ? 0.48f : 0.24f * mRadius * deltaTime;
+	}
+	if (keyState.at('D'))
+	{
+		mEyeMoveX += pressShift ? 0.48f : 0.24f * mRadius * deltaTime;
+	}
+	if (keyState.at('W'))
+	{
+		mEyeMoveZ += pressShift ? 0.48f : 0.24f * mRadius * deltaTime;
+	}
+	if (keyState.at('S'))
+	{
+		mEyeMoveZ -= pressShift ? 0.48f : 0.24f * mRadius * deltaTime;
+	}
+
+	switch (btnState)
+	{
+	case VK_SPACE:
+		const auto& key = std::next(std::begin(nations), rand() % nations.size());
+		captions[L"선택한 국가"] = key->second->MainName;
+		mUser.nationPick = key->first;
 		return;
 	}
 }
@@ -483,7 +545,7 @@ void MyApp::LoadSizeDependentResources()
 }
 void MyApp::UILayerResize(ComPtr<ID3D12Resource>* ppRenderTargets, UINT width, UINT height)
 {
-	auto m_width = static_cast<float>(width);
+	//auto m_width = static_cast<float>(width);
 	auto m_height = static_cast<float>(height);
 
 	// Query the desktop's dpi settings, which will be used to create
@@ -654,10 +716,8 @@ void MyApp::Pick(WPARAM btnState, int sx, int sy)
 	XMVECTOR rayDir = XMVectorSet(vx, vy, 1.0f, 0.0f);
 
 	XMMATRIX V = XMLoadFloat4x4(&mView);
-	XMMATRIX invView = XMMatrixInverse(&XMMatrixDeterminant(V), V);
-
-	mPickedRitem->Visible = false;
-
+	XMMATRIX invView = XMMatrixInverse(new XMVECTOR(XMMatrixDeterminant(V)), V);
+	
 	for (auto ri : mRitemLayer[(int)RenderLayer::Province])
 	{
 		auto geo = ri->Geo;
@@ -666,7 +726,7 @@ void MyApp::Pick(WPARAM btnState, int sx, int sy)
 			continue;
 
 		XMMATRIX W = XMLoadFloat4x4(&ri->World);
-		XMMATRIX invWorld = XMMatrixInverse(&XMMatrixDeterminant(W), W);
+		XMMATRIX invWorld = XMMatrixInverse(new XMVECTOR(XMMatrixDeterminant(W)), W);
 
 		XMMATRIX toLocal = XMMatrixMultiply(invView, invWorld);
 
@@ -708,7 +768,6 @@ void MyApp::Pick(WPARAM btnState, int sx, int sy)
 			#pragma endregion
 			if (lastPick != 0)
 			{
-				mCursorProvince = vertices[lastPick].Prov;
 				ProvinceMousedown(btnState, vertices[lastPick].Prov);
 			}
 		}
@@ -724,6 +783,7 @@ void MyApp::OnMouseMove(WPARAM btnState, int x, int y)
 {
     if((btnState & MK_LBUTTON) != 0)
     {
+		//mPhi = MathHelper::Clamp(mPhi, 0.000001f, MathHelper::Pi - 0.1f);
         // Make each pixel correspond to a quarter of a degree.
         float dx = XMConvertToRadians(0.25f*static_cast<float>(x - mLastMousePos.x));
         float dy = XMConvertToRadians(0.25f*static_cast<float>(y - mLastMousePos.y));
@@ -732,8 +792,16 @@ void MyApp::OnMouseMove(WPARAM btnState, int x, int y)
         mTheta += dx;
         mPhi += dy;
 
+		if (mRadius * cosf(mPhi) < 10.f)
+		{
+			mPhi = acosf(10.f / mRadius);
+		}
+		else if (mPhi < 0.000001f)
+		{
+			mPhi = 0.000001f;
+		}
+
         // Restrict the angle mPhi.
-        mPhi = MathHelper::Clamp(mPhi, 0.1f, MathHelper::Pi - 0.1f);
     }
     else if((btnState & MK_RBUTTON) != 0)
     {
@@ -756,34 +824,20 @@ void MyApp::OnKeyboardInput(const GameTimer& gt)
 {
 }
 
-void MyApp::OnKeyDown(WPARAM btnState)
-{
-	switch (btnState)
-	{
-	case VK_SPACE:
-		mCursorProvince++;
-		break;
-	}
-}
 
 void MyApp::UpdateCamera(const GameTimer& gt)
 {
-	if (mPhi > 1.4f)
-	{
-		mPhi = 1.4f;
-	}
-
 	// Convert Spherical to Cartesian coordinates.
-	mEyePos.x = mRadius*sinf(mPhi)*cosf(mTheta);
-	mEyePos.z = mRadius*sinf(mPhi)*sinf(mTheta);
-	mEyePos.y = mRadius*cosf(mPhi);
+	mEyePos.x = mRadius*sinf(mPhi + 0.0001f)*cosf(mTheta);
+	mEyePos.z = mRadius*sinf(mPhi + 0.0001f)*sinf(mTheta);
+	mEyePos.y = mRadius*cosf(mPhi + 0.0001f) - 5.0f;
 	
 	// Build the view matrix.
-	XMVECTOR pos = XMVectorSet(mEyePos.x, mEyePos.y, mEyePos.z, 1.0f);
-	XMVECTOR target = XMVectorSet(0.0f, 5.0f, 0.0f, 0.0f);
+	XMVECTOR pos = XMVectorSet(mEyePos.x, mEyePos.y, mEyePos.z, 1.0f) + mEyetarget;
+	
 	XMVECTOR up = XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
 	
-	XMMATRIX view = XMMatrixLookAtLH(pos, target, up);
+	XMMATRIX view = XMMatrixLookAtLH(pos, mEyetarget, up);
 	XMStoreFloat4x4(&mView, view);
 }
 
@@ -870,9 +924,9 @@ void MyApp::UpdateMainPassCB(const GameTimer& gt)
 	XMMATRIX proj = XMLoadFloat4x4(&mProj);
 
 	XMMATRIX viewProj = XMMatrixMultiply(view, proj);
-	XMMATRIX invView = XMMatrixInverse(&XMMatrixDeterminant(view), view);
-	XMMATRIX invProj = XMMatrixInverse(&XMMatrixDeterminant(proj), proj);
-	XMMATRIX invViewProj = XMMatrixInverse(&XMMatrixDeterminant(viewProj), viewProj);
+	XMMATRIX invView = XMMatrixInverse(new XMVECTOR(XMMatrixDeterminant(view)), view);
+	XMMATRIX invProj = XMMatrixInverse(new XMVECTOR(XMMatrixDeterminant(proj)), proj);
+	XMMATRIX invViewProj = XMMatrixInverse(new XMVECTOR(XMMatrixDeterminant(viewProj)), viewProj);
 
 	XMStoreFloat4x4(&mMainPassCB.View, XMMatrixTranspose(view));
 	XMStoreFloat4x4(&mMainPassCB.InvView, XMMatrixTranspose(invView));
@@ -1019,7 +1073,7 @@ void MyApp::BuildDescriptorHeaps()
 	srvDesc.Format = grassTex->GetDesc().Format;
 	srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
 	srvDesc.Texture2D.MostDetailedMip = 0;
-	srvDesc.Texture2D.MipLevels = -1;
+	srvDesc.Texture2D.MipLevels = 0xFFFFFFFF;
 	md3dDevice->CreateShaderResourceView(grassTex.Get(), &srvDesc, hDescriptor);
 
 	// next descriptor
@@ -1092,9 +1146,9 @@ void dex2rgb(float& r, float& g, float& b, const Color32& dex)
 }
 void dex2rgb(unsigned char& r, unsigned char& g, unsigned char& b, const Color32& dex)
 {
-	r = (dex & 16711680) / 65536;
-	g = (dex & 65208) / 256;
-	b = (dex & 255);
+	r = static_cast<UCHAR>((dex & 16711680) / 65536);
+	g = static_cast<UCHAR>((dex & 65208) / 256);
+	b = static_cast<UCHAR>((dex & 255));
 }
 void dex2rgb(unsigned int& r, unsigned int& g, unsigned int& b, const Color32& dex)
 {
@@ -1200,10 +1254,10 @@ void MyApp::BuildLandGeometry()
 				mLandVertices[x + y * w].TexC = { 1.f / (w - 1) * x, 1.f / (h - 1) * y};
 				mLandVertices[x + y * w].Prov = 0;
 
-				XMVECTOR P = XMLoadFloat3(&mLandVertices[x + y * w].Pos);
+				XMVECTOR Pos = XMLoadFloat3(&mLandVertices[x + y * w].Pos);
 				
-				vMin = XMVectorMin(vMin, P);
-				vMax = XMVectorMax(vMax, P);
+				vMin = XMVectorMin(vMin, Pos);
+				vMax = XMVectorMax(vMax, Pos);
 				 
 				dex = rgb2dex(prov_buf.at(addr + 2), prov_buf.at(addr + 1), prov_buf.at(addr));
 				
@@ -1235,7 +1289,7 @@ void MyApp::BuildLandGeometry()
 						XMUINT3 u3;
 						syc = MathHelper::Infinity;
 						dex2rgb(R0, G0, B0, dex);
-
+						
 						for (const auto& P : prov_key)
 						{
 							dex2rgb(R1, G1, B1, P.first);
@@ -1255,7 +1309,7 @@ void MyApp::BuildLandGeometry()
 				}
 
 
-				float dx = 0.f, dy = 0.f;
+				//float dx = 0.f, dy = 0.f;
 
 				XMFLOAT3 n = { 0.f, 1.f, 0.f };
 				if (x > 0)
@@ -1307,13 +1361,13 @@ void MyApp::BuildLandGeometry()
 		{
 			for (std::uint16_t y = 0; y < h - 2; ++y)
 			{
-				indices.push_back(x + 1 + (y + 1) * w); // 3
-				indices.push_back(x + 1 + y * w); // 1
-				indices.push_back(x + y * w); // 0
+				indices.push_back(static_cast<std::uint16_t>(x + 1 + (y + 1) * w)); // 3
+				indices.push_back(static_cast<std::uint16_t>(x + 1 + y * w)); // 1
+				indices.push_back(static_cast<std::uint16_t>(x + y * w)); // 0
 
-				indices.push_back(x + (y + 1) * w); // 2
-				indices.push_back(x + 1 + (y + 1) * w); // 3
-				indices.push_back(x + y * w); // 0
+				indices.push_back(static_cast<std::uint16_t>(x + (y + 1) * w)); // 2
+				indices.push_back(static_cast<std::uint16_t>(x + 1 + (y + 1) * w)); // 3
+				indices.push_back(static_cast<std::uint16_t>(x + y * w)); // 0
 
 			}
 		}
@@ -1371,13 +1425,13 @@ void MyApp::BuildWavesGeometry()
     {
         for(int j = 0; j < n - 1; ++j)
         {
-            indices[k] = i*n + j;
-            indices[k + 1] = i*n + j + 1;
-            indices[k + 2] = (i + 1)*n + j;
+            indices.at(k) = static_cast<std::uint16_t>(i*n + j);
+            indices.at(k + 1) = static_cast<std::uint16_t>(i*n + j + 1);
+            indices.at(k + 2) = static_cast<std::uint16_t>((i + 1)*n + j);
 
-            indices[k + 3] = (i + 1)*n + j;
-            indices[k + 4] = i*n + j + 1;
-            indices[k + 5] = (i + 1)*n + j + 1;
+            indices.at(k + 3) = static_cast<std::uint16_t>((i + 1)*n + j);
+            indices.at(k + 4) = static_cast<std::uint16_t>(i*n + j + 1);
+            indices.at(k + 5) = static_cast<std::uint16_t>((i + 1)*n + j + 1);
 
             k += 6; // next quad
         }
@@ -1760,7 +1814,7 @@ void MyApp::BuildRenderItems()
 		mAllRitems.push_back(std::move(newboxRitem_u));
 	}
 		
-	auto pickedRitem = std::make_unique<RenderItem>();
+	/*auto pickedRitem = std::make_unique<RenderItem>();
 	pickedRitem->World = MathHelper::Identity4x4();
 	pickedRitem->TexTransform = MathHelper::Identity4x4();
 	pickedRitem->ObjCBIndex = 1;
@@ -1774,10 +1828,10 @@ void MyApp::BuildRenderItems()
 	pickedRitem->StartIndexLocation = 0;
 	pickedRitem->BaseVertexLocation = 0;
 	mPickedRitem = pickedRitem.get();
-	mRitemLayer[(int)RenderLayer::Opaque].push_back(pickedRitem.get());
+	mRitemLayer[(int)RenderLayer::Opaque].push_back(pickedRitem.get());*/
 
 
-	mAllRitems.push_back(std::move(pickedRitem));
+	//mAllRitems.push_back(std::move(pickedRitem));
     mAllRitems.push_back(std::move(wavesRitem));
     mAllRitems.push_back(std::move(gridRitem));
 
@@ -1800,9 +1854,9 @@ void MyApp::DrawRenderItems(ID3D12GraphicsCommandList* cmdList, const std::vecto
 		if (!ri->Visible)
 			continue;
 
-
-        cmdList->IASetVertexBuffers(0, 1, &ri->Geo->VertexBufferView());
-        cmdList->IASetIndexBuffer(&ri->Geo->IndexBufferView());
+		
+        cmdList->IASetVertexBuffers(0, 1, new D3D12_VERTEX_BUFFER_VIEW(ri->Geo->VertexBufferView()));
+        cmdList->IASetIndexBuffer(new D3D12_INDEX_BUFFER_VIEW(ri->Geo->IndexBufferView()));
         cmdList->IASetPrimitiveTopology(ri->PrimitiveType);
 
 		CD3DX12_GPU_DESCRIPTOR_HANDLE tex(mSrvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());

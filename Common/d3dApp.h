@@ -22,6 +22,7 @@
 #include <d3d11on12.h>
 #include <DirectXMath.h>	
 #include <dxgidebug.h>
+#include <utility>
 
 #include "d3dUtil.h"
 #include "GameTimer.h"
@@ -38,6 +39,7 @@
 #pragma comment(lib, "D3D11.lib")
 #pragma comment(lib, "D2D1.lib")
 
+#pragma warning (disable : 4100 )
 
 class D3DApp
 {
@@ -82,6 +84,7 @@ protected:
 	bool InitDirect3D();
 	void CreateCommandObjects();
     void CreateSwapChain();
+	void ToggleFullscreenWindow();
 
 	void FlushCommandQueue();
 
@@ -100,6 +103,7 @@ protected:
 
     static D3DApp* mApp;
 
+	RECT m_windowRect;
     HINSTANCE mhAppInst = nullptr; // application instance handle
     HWND      mhMainWnd = nullptr; // main window handle
 	bool      mAppPaused = false;  // is the application paused?
@@ -146,8 +150,8 @@ protected:
 	D3D_DRIVER_TYPE md3dDriverType = D3D_DRIVER_TYPE_HARDWARE;
     DXGI_FORMAT mBackBufferFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
     DXGI_FORMAT mDepthStencilFormat = DXGI_FORMAT_D24_UNORM_S8_UINT;
-	int mClientWidth = 800;
-	int mClientHeight = 600;
+	int mClientWidth = 1280;
+	int mClientHeight = 800;
 
 	Microsoft::WRL::ComPtr<ID3D11DeviceContext> m_d3d11DeviceContext;
 	Microsoft::WRL::ComPtr<ID3D11On12Device> m_d3d11On12Device;
@@ -160,6 +164,7 @@ protected:
 	Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> m_textBrush;
 	Microsoft::WRL::ComPtr<IDWriteTextFormat> m_textFormat;
 
+	bool m_fullscreenMode = false;
 	bool uiFirst = true;
 
 	struct DxgiAdapterInfo
@@ -176,5 +181,6 @@ protected:
 	FrameResource* mCurrFrameResource = nullptr;
 	int mCurrFrameResourceIndex = 0;
 
+	std::array<bool, 256> keyState;
 };
 

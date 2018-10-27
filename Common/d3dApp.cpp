@@ -72,7 +72,7 @@ void D3DApp::Set4xMsaaState(bool value)
 int D3DApp::Run()
 {
 	MSG msg = {0};
- 
+
 	mTimer.Reset();
 
 	while(msg.message != WM_QUIT)
@@ -112,6 +112,10 @@ bool D3DApp::Initialize()
 	if(!InitDirect3D())
 		return false;
 
+	for (size_t i = 0; i < keyState.size(); ++i)
+	{
+		keyState[i] = false;
+	}
     // Do the initial resize code.
     OnResize();
 
@@ -159,10 +163,13 @@ void D3DApp::OnResize()
 		for (UINT i = 0; i < m_wrappedRenderTargets.size(); i++)
 		{
 			ID3D11Resource* ppResources[] = { m_wrappedRenderTargets[i].Get() };
-			m_d3d11On12Device->ReleaseWrappedResources(ppResources, _countof(ppResources));
+			if (m_d3d11On12Device != nullptr)
+				m_d3d11On12Device->ReleaseWrappedResources(ppResources, _countof(ppResources));
 		}
-		m_d2dDeviceContext->SetTarget(nullptr);
-		m_d3d11DeviceContext->Flush();
+		if (m_d2dDeviceContext != nullptr)
+			m_d2dDeviceContext->SetTarget(nullptr);
+		if (m_d3d11DeviceContext != nullptr)
+			m_d3d11DeviceContext->Flush();
 		for (UINT i = 0; i < m_wrappedRenderTargets.size(); i++)
 		{
 			m_d2dRenderTargets[i].Reset();
@@ -344,6 +351,7 @@ LRESULT D3DApp::MsgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 	// WM_EXITSIZEMOVE is sent when the user releases the resize bars.
 	// Here we reset everything based on the new window dimensions.
 	case WM_EXITSIZEMOVE:
+		GetWindowRect(mhMainWnd, &m_windowRect);
 		mAppPaused = false;
 		mResizing  = false;
 		mTimer.Start();
@@ -381,15 +389,27 @@ LRESULT D3DApp::MsgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 		OnMouseMove(wParam, GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
 		return 0;
     case WM_KEYUP:
+		keyState.at(wParam) = false;
         if(wParam == VK_ESCAPE)
         {
+			ShowWindow(mhMainWnd, SW_HIDE);
             PostQuitMessage(0);
         }
-        //else if((int)wParam == VK_F2)
-        //    Set4xMsaaState(!m4xMsaaState);
 
         return 0;
+	case WM_MOVE:
+		GetWindowRect(mhMainWnd, &m_windowRect);
+		break;
+
+	case WM_SYSKEYDOWN:
+		GetWindowRect(mhMainWnd, &m_windowRect);
+		if ((wParam == VK_RETURN) && (lParam & (1 << 29)))
+		{
+			ToggleFullscreenWindow();
+		}
+		break;
 	case WM_KEYDOWN:
+		keyState.at(wParam) = true;
 		OnKeyDown(wParam);
 		return 0;
 	}
@@ -434,6 +454,7 @@ bool D3DApp::InitMainWindow()
 	ShowWindow(mhMainWnd, SW_SHOW);
 	UpdateWindow(mhMainWnd);
 
+	GetWindowRect(mhMainWnd, &m_windowRect);
 	return true;
 }
 
@@ -752,4 +773,62 @@ void D3DApp::LogOutputDisplayModes(IDXGIOutput* output, DXGI_FORMAT format)
 
         ::OutputDebugString(text.c_str());*/
     }
+}
+
+void D3DApp::ToggleFullscreenWindow()
+{
+	auto& m_hwnd = mhMainWnd;
+	if (m_fullscreenMode)
+	{
+		// Restore the window's attributes and size.
+		SetWindowLong(m_hwnd, GWL_STYLE, WS_OVERLAPPEDWINDOW);
+
+		SetWindowPos(
+			m_hwnd,
+			HWND_NOTOPMOST,
+			m_windowRect.left,
+			m_windowRect.top,
+			m_windowRect.right - m_windowRect.left,
+			m_windowRect.bottom - m_windowRect.top,
+			SWP_FRAMECHANGED | SWP_NOACTIVATE);
+
+		ComPtr<IDXGIOutput> pOutput;
+		ThrowIfFailed(mSwapChain->GetContainingOutput(&pOutput));
+		DXGI_OUTPUT_DESC Desc;
+		ThrowIfFailed(pOutput->GetDesc(&Desc));
+
+		ShowWindow(m_hwnd, SW_NORMAL);
+		
+
+	}
+	else
+	{
+		// Save the old window rect so we can restore it when exiting fullscreen mode.
+		GetWindowRect(m_hwnd, &m_windowRect);
+
+		// Make the window borderless so that the client area can fill the screen.
+		SetWindowLong(m_hwnd, GWL_STYLE, WS_OVERLAPPEDWINDOW & ~(WS_CAPTION | WS_MAXIMIZEBOX | WS_MINIMIZEBOX | WS_SYSMENU | WS_THICKFRAME));
+
+		RECT fullscreenWindowRect;
+
+		ComPtr<IDXGIOutput> pOutput;
+		ThrowIfFailed(mSwapChain->GetContainingOutput(&pOutput));
+		DXGI_OUTPUT_DESC Desc;
+		ThrowIfFailed(pOutput->GetDesc(&Desc));
+		fullscreenWindowRect = Desc.DesktopCoordinates;
+
+		SetWindowPos(
+			m_hwnd,
+			HWND_TOPMOST,
+			fullscreenWindowRect.left,
+			fullscreenWindowRect.top,
+			mClientWidth,
+			mClientHeight,
+			SWP_FRAMECHANGED | SWP_NOACTIVATE);
+
+
+		ShowWindow(m_hwnd, SW_MAXIMIZE);
+	}
+	m_fullscreenMode = !m_fullscreenMode;
+
 }

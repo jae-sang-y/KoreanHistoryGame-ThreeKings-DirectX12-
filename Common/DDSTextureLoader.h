@@ -43,7 +43,7 @@
 #endif
 
 //#ifndef _Use_decl_annotations_
-#define _Use_decl_annotations_
+//#define _Use_decl_annotations_
 
 namespace DirectX
 {
