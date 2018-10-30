@@ -7,10 +7,6 @@
 #include "Common/UploadBuffer.h"
 #include "Common/GeometryGenerator.h"
 #include "Waves.h"
-#include <ppl.h>
-#include <algorithm>
-#include <map>
-#include <set>
 
 
 using Microsoft::WRL::ComPtr;
@@ -85,6 +81,8 @@ private:
     virtual void Update(const GameTimer& gt)override;
     virtual void Draw(const GameTimer& gt)override;
 
+	void DrawUI();
+
 
 	virtual void OnKeyDown(WPARAM btnState)override;
     virtual void OnMouseDown(WPARAM btnState, int x, int y)override;
@@ -119,6 +117,8 @@ private:
 	void GameInit();
 	void GameUpdate();
 	void GameStep();
+	void GameSave();
+	void GameLoad();
 	void ProvinceMousedown(WPARAM btnState, ProvinceId id);
 private:
 
@@ -160,6 +160,8 @@ private:
 
 	size_t map_w = 0;
 	size_t map_h = 0;
+
+	float mX = 0;
 	
     POINT mLastMousePos;
 
@@ -188,7 +190,7 @@ private:
 		{		
 		}
 	};
-	std::unordered_map<ProvinceId, Province> prov_stack;
+	std::map<ProvinceId, Province> prov_stack;
 	using WCHAR3 = WCHAR[3];
 	struct Nation
 	{	
@@ -316,6 +318,64 @@ void MyApp::Update(const GameTimer& gt)
 	GameUpdate();
 }
 
+void MyApp::DrawUI()
+{
+	auto&& g = m_d2dDeviceContext;
+
+	g->DrawText(mUser.DebugText.c_str(), (UINT32)mUser.DebugText.length(), m_textFormat.Get(), D2D1::RectF(30.0f, 30.0f, 300.f, 100.f), m_textBrush.Get());
+
+
+
+
+
+
+	{
+
+		XMMATRIX V = XMLoadFloat4x4(&mView);
+		XMMATRIX invView = XMMatrixInverse(new XMVECTOR(XMMatrixDeterminant(V)), V);
+
+
+		XMMATRIX W = XMLoadFloat4x4(&MathHelper::Identity4x4());
+
+		XMMATRIX invWorld = XMMatrixInverse(new XMVECTOR(XMMatrixDeterminant(W)), W);
+
+		XMMATRIX toLocal = XMMatrixMultiply(invView, invWorld);
+
+		XMVECTOR rayOrigin = XMVector3TransformCoord(rayOrigin, toLocal);
+		XMVECTOR rayDir = XMVector3TransformNormal(rayDir, toLocal);
+		rayDir = XMVector3Normalize(rayDir);
+
+		float vx = rayDir.m128_f32[0];
+		float vy = rayDir.m128_f32[1];
+
+		XMFLOAT4X4 P = mProj;
+		float sx = (-vx * P(0, 0) + 1.0f) * (mClientWidth / 2.0f);
+		float sy = -(-vy * P(1, 1) - 1.0f) * (mClientHeight / 2.0f);
+
+		captions[L"SX"] = std::to_wstring(sx);
+		captions[L"SY"] = std::to_wstring(sy);
+
+		g->DrawRectangle({ sx - 64.f, sy - 64.f, sx + 64.f, sy + 64.f }, m_textBrush.Get());
+	}
+
+
+
+	//if (captions.find(L"선택한 프로빈스") != captions.end())
+	{
+		//float x = std::stof(captions[L"선택한 프로빈스.x"]), y = std::stof(captions[L"선택한 프로빈스.z"]), z = 0.f;
+		
+
+
+		{			
+			//g->DrawRectangle({ pos.x - 64.f, pos.y - 64.f, pos.x + 64.f, pos.y + 64.f }, m_textBrush.Get());
+		}
+
+
+	}
+
+	
+
+}
 void MyApp::Draw(const GameTimer& gt)
 {
 	auto cmdListAlloc = mCurrFrameResource->CmdListAlloc;
@@ -369,7 +429,7 @@ void MyApp::Draw(const GameTimer& gt)
 		m_d3d11On12Device->AcquireWrappedResources(ppResources, _countof(ppResources));
 		m_d2dDeviceContext->BeginDraw();
 
-		m_d2dDeviceContext->DrawText(mUser.DebugText.c_str(), (UINT32)mUser.DebugText.length(), m_textFormat.Get(), D2D1::RectF(30.0f, 30.0f, 300.f, 100.f), m_textBrush.Get());
+		DrawUI();
 
 		m_d2dDeviceContext->EndDraw();
 		m_d3d11On12Device->ReleaseWrappedResources(ppResources, _countof(ppResources));
@@ -385,8 +445,25 @@ void MyApp::Draw(const GameTimer& gt)
 	mCommandQueue->Signal(mFence.Get(), mCurrentFence);
 }
 
+void MyApp::GameSave()
+{
+	captions[L"파일 입출력"] = L"저장시작";
+	std::ofstream file("Saves/Nation");
+	file << "Hello World!" << std::endl;
+	file.close();
+	captions[L"파일 입출력"] = L"저장종료";
+}
+void MyApp::GameLoad()
+{
+	captions[L"파일 입출력"] = L"적재시작";
+	captions[L"파일 입출력"] = L"적재종료";
+
+}
+
 void MyApp::GameInit()
 {
+	srand((unsigned int)time(nullptr));
+
 	NationId nation_count = 0;
 	{
 		std::unique_ptr<Nation> 신라 = std::make_unique<Nation>();
@@ -447,9 +524,9 @@ void MyApp::GameUpdate()
 	captions[L"Radius"] = std::to_wstring(mRadius);
 
 
-	captions[L"CamX"] = std::to_wstring(mRadius * sinf(mPhi)*cosf(mTheta));
-	captions[L"CamY"] = std::to_wstring(mRadius * cosf(mPhi));
-	captions[L"CamZ"] = std::to_wstring(mRadius * sinf(mPhi)*sinf(mTheta));
+	captions[L"CamPosX"] = std::to_wstring(mEyetarget.m128_f32[0]);
+	captions[L"CamPosY"] = std::to_wstring(mEyetarget.m128_f32[1]);
+	captions[L"CamPosZ"] = std::to_wstring(mEyetarget.m128_f32[2]);	
 }
 
 void MyApp::ProvinceMousedown(WPARAM btnState, ProvinceId id)
@@ -458,10 +535,24 @@ void MyApp::ProvinceMousedown(WPARAM btnState, ProvinceId id)
 	if (prov == prov_stack.end())
 		return;
 	captions[L"선택한 프로빈스"] = std::to_wstring(id);
+	captions[L"선택한 프로빈스.x"] = std::to_wstring(2.f * prov->second.px / prov->second.p_num);
+	captions[L"선택한 프로빈스.z"] = std::to_wstring(2.f * prov->second.pz / prov->second.p_num);
+
 	if (btnState & MK_LBUTTON)
 	{
-		prov->second.owner = mUser.nationPick;
-		prov->second.ruler = mUser.nationPick;
+		if (prov->second.owner == 0)
+		{
+			prov->second.ruler = mUser.nationPick;
+			prov->second.owner = mUser.nationPick;
+		}
+		else if (prov->second.ruler != mUser.nationPick)
+		{
+			prov->second.ruler = mUser.nationPick;
+		}
+		else
+		{
+			prov->second.owner = mUser.nationPick;
+		}
 		return;
 	}
 	if (btnState & MK_RBUTTON)
@@ -516,10 +607,22 @@ void MyApp::OnKeyDown(WPARAM btnState)
 	switch (btnState)
 	{
 	case VK_SPACE:
+	{
 		const auto& key = std::next(std::begin(nations), rand() % nations.size());
 		captions[L"선택한 국가"] = key->second->MainName;
 		mUser.nationPick = key->first;
 		return;
+	}
+	case VK_INSERT:
+	{
+		GameSave();
+		return;
+	}
+	case VK_DELETE:
+	{
+		GameLoad();
+		return;
+	}
 	}
 }
 
@@ -717,8 +820,10 @@ void MyApp::Pick(WPARAM btnState, int sx, int sy)
 
 	XMMATRIX V = XMLoadFloat4x4(&mView);
 	XMMATRIX invView = XMMatrixInverse(new XMVECTOR(XMMatrixDeterminant(V)), V);
-	
-	for (auto ri : mRitemLayer[(int)RenderLayer::Province])
+
+	std::uint16_t lastPick = 0;
+	VertexForProvince* lastPickObj = nullptr;
+	for (auto& ri : mRitemLayer[(int)RenderLayer::Province])
 	{
 		auto geo = ri->Geo;
 
@@ -735,7 +840,6 @@ void MyApp::Pick(WPARAM btnState, int sx, int sy)
 		rayDir = XMVector3Normalize(rayDir);
 
 		float tmin = 0.0f;
-		std::uint16_t lastPick = 0;
 		if (ri->Bounds.Intersects(rayOrigin, rayDir, tmin))
 		{
 			auto vertices = (VertexForProvince*)geo->VertexBufferCPU->GetBufferPointer();
@@ -761,17 +865,17 @@ void MyApp::Pick(WPARAM btnState, int sx, int sy)
 					if (t < tmin)
 					{
 						tmin = t;
+						lastPickObj = vertices;
 						lastPick = indices[i * 3 + 0];
 					}
 				}
 			}
 			#pragma endregion
-			if (lastPick != 0)
-			{
-				ProvinceMousedown(btnState, vertices[lastPick].Prov);
-			}
 		}
-
+	}
+	if (lastPick != 0)
+	{
+		ProvinceMousedown(btnState, lastPickObj[lastPick].Prov);
 	}
 }
 void MyApp::OnMouseUp(WPARAM btnState, int x, int y)
@@ -1720,7 +1824,7 @@ void MyApp::BuildRenderItems()
 	float border_wdith = 10.f;
 	float border_height = 2.f;
 
-	{
+	/*{
 		auto newboxRitem = boxRitem;
 		auto newboxRitem_u = std::make_unique<RenderItem>(newboxRitem);
 
@@ -1771,8 +1875,19 @@ void MyApp::BuildRenderItems()
 
 		mRitemLayer[(int)RenderLayer::Opaque].push_back(newboxRitem_u.get());
 		mAllRitems.push_back(std::move(newboxRitem_u));
-	}
+	}*/
+	{
+		auto newboxRitem = boxRitem;
+		auto newboxRitem_u = std::make_unique<RenderItem>(newboxRitem);
 
+		newboxRitem_u->ObjCBIndex = all_CBIndex++;
+		XMStoreFloat4x4(&newboxRitem_u->World,
+			XMMatrixTranslation(10.0f, 0.0f, 0.0f)
+		);
+
+		mRitemLayer[(int)RenderLayer::Opaque].push_back(newboxRitem_u.get());
+		mAllRitems.push_back(std::move(newboxRitem_u));
+	}
 	/*for (size_t a = 0; a < map_w; ++a)
 	{
 		for (size_t b = 0; b < map_h; ++b)
@@ -1782,37 +1897,37 @@ void MyApp::BuildRenderItems()
 		}
 	}*/
 
-	for (const auto& O : prov_stack)
-	{
-		auto newboxRitem = boxRitem;
-		auto newboxRitem_u = std::make_unique<RenderItem>(newboxRitem);
+	//for (const auto& O : prov_stack)
+	//{
+	//	auto newboxRitem = boxRitem;
+	//	auto newboxRitem_u = std::make_unique<RenderItem>(newboxRitem);
 
-		
-		int x = (int)(1.f * O.second.px / O.second.p_num + (map_w - 1.f) / 2.f);
-		int y = (int)(1.f * O.second.pz / O.second.p_num + (map_h - 1.f) / 2.f);
+	//	
+	//	int x = (int)(1.f * O.second.px / O.second.p_num + (map_w - 1.f) / 2.f);
+	//	int y = (int)(1.f * O.second.pz / O.second.p_num + (map_h - 1.f) / 2.f);
 
 
-		//int x = std::roundf(2.f * O.second.px / O.second.p_num + (map_w - 1) / 2.f);
-		//int y = std::roundf(2.f * O.second.pz / O.second.p_num + (map_h - 1) / 2.f);
-		
-		newboxRitem_u->ObjCBIndex = all_CBIndex++;
+	//	//int x = std::roundf(2.f * O.second.px / O.second.p_num + (map_w - 1) / 2.f);
+	//	//int y = std::roundf(2.f * O.second.pz / O.second.p_num + (map_h - 1) / 2.f);
+	//	
+	//	newboxRitem_u->ObjCBIndex = all_CBIndex++;
 
-		if (x >= 0 && x < map_w && y >= 0 && y < map_h)
-		{
-			//OutputDebugStringA((std::to_string(mLandVertices.at(x + map_w * y).Pos.x - 2.f * O.second.px / O.second.p_num) + " ; " + std::to_string(mLandVertices.at(x + map_w * y).Pos.z - 2.f * O.second.pz / O.second.p_num) + "\n").c_str());
-			XMStoreFloat4x4(&newboxRitem_u->World,
-				XMMatrixTranslation(
-					2.f * O.second.px / O.second.p_num,
-					2.f * mLandVertices.at(x + map_w * y).Pos.y - 2.f,
-					2.f * O.second.pz / O.second.p_num)
-				+
-				XMMatrixScaling(5.0f, 5.0f, 5.0f)
-			);
-		}
+	//	if (x >= 0 && x < map_w && y >= 0 && y < map_h)
+	//	{
+	//		//OutputDebugStringA((std::to_string(mLandVertices.at(x + map_w * y).Pos.x - 2.f * O.second.px / O.second.p_num) + " ; " + std::to_string(mLandVertices.at(x + map_w * y).Pos.z - 2.f * O.second.pz / O.second.p_num) + "\n").c_str());
+	//		XMStoreFloat4x4(&newboxRitem_u->World,
+	//			XMMatrixTranslation(
+	//				2.f * O.second.px / O.second.p_num,
+	//				2.f * mLandVertices.at(x + map_w * y).Pos.y - 2.f,
+	//				2.f * O.second.pz / O.second.p_num)
+	//			+
+	//			XMMatrixScaling(5.0f, 5.0f, 5.0f)
+	//		);
+	//	}
 
-		mRitemLayer[(int)RenderLayer::Opaque].push_back(newboxRitem_u.get());
-		mAllRitems.push_back(std::move(newboxRitem_u));
-	}
+	//	mRitemLayer[(int)RenderLayer::Opaque].push_back(newboxRitem_u.get());
+	//	mAllRitems.push_back(std::move(newboxRitem_u));
+	//}
 		
 	/*auto pickedRitem = std::make_unique<RenderItem>();
 	pickedRitem->World = MathHelper::Identity4x4();

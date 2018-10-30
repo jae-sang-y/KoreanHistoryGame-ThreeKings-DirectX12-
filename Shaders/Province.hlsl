@@ -115,9 +115,9 @@ float4 PS(VertexOut pin) : SV_Target
 		diffuseAlbedo.b *= (pin.PosW.y - 0.5f) / 2.5f;
 	}
 
-	if (pin.PosW.y >= 0.5f && pin.Prov.a > 0.f)
+	if (pin.PosW.y >= 0.3f && pin.Prov.a > 0.f)
 	{
-		if (sin((pin.PosW.x + pin.PosW.z) * 2.7f) > 0.3f)
+		if (sin((pin.PosW.x + pin.PosW.z) * 2.7f) > 0.8f)
 		{
 			diffuseAlbedo.rgb = diffuseAlbedo.rgb * (1.f - pin.SubProv.a) + pin.SubProv.rgb * pin.SubProv.a;
 		}
