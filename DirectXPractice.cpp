@@ -112,6 +112,7 @@ private:
 	void Pick(WPARAM btnState, int sx, int sy);
 	void LoadSizeDependentResources();
 	std::array<const CD3DX12_STATIC_SAMPLER_DESC, 6> GetStaticSamplers();
+	const XMFLOAT3& MyApp::Convert3Dto2D(XMVECTOR pos);
 	void UILayerInitialize(ID3D12Device* pDevice, ID3D12CommandQueue* pCommandQueue);
 	void UILayerResize(ComPtr<ID3D12Resource>* ppRenderTargets, UINT width, UINT height);
 	void GameInit();
@@ -120,6 +121,7 @@ private:
 	void GameSave();
 	void GameLoad();
 	void ProvinceMousedown(WPARAM btnState, ProvinceId id);
+
 private:
 
     UINT mCbvSrvDescriptorSize = 0;
@@ -318,48 +320,40 @@ void MyApp::Update(const GameTimer& gt)
 	GameUpdate();
 }
 
+const XMFLOAT3& MyApp::Convert3Dto2D(XMVECTOR pos)
+{
+	pos = XMVector3Transform(pos, XMLoadFloat4x4(&mView));
+	pos = XMVector3Transform(pos, XMLoadFloat4x4(&mProj));
+
+	XMFLOAT3 newPos;
+	XMStoreFloat3(&newPos, pos);
+
+	newPos.x /= newPos.z;
+	newPos.y /= newPos.z;
+
+	newPos.x = mClientWidth * (newPos.x + 1.0f) / 2.0f;
+	newPos.y = mClientHeight * (1.0f - ((newPos.y + 1.0f) / 2.0f));
+
+	return newPos;
+}
+
 void MyApp::DrawUI()
 {
 	auto&& g = m_d2dDeviceContext;
 
 	g->DrawText(mUser.DebugText.c_str(), (UINT32)mUser.DebugText.length(), m_textFormat.Get(), D2D1::RectF(30.0f, 30.0f, 300.f, 100.f), m_textBrush.Get());
 
+	XMFLOAT3 s = Convert3Dto2D(XMLoadFloat3(new XMFLOAT3(10.f, 0.f, 0.f)));
 
+	float sx = s.x;
+	float sy = s.y;
+	float sz = 64.f / s.z;
 
+	captions[L"SX"] = std::to_wstring(sx);
+	captions[L"SY"] = std::to_wstring(sy);
+	captions[L"SZ"] = std::to_wstring(s.z);
 
-
-
-	{
-
-		XMMATRIX V = XMLoadFloat4x4(&mView);
-		XMMATRIX invView = XMMatrixInverse(new XMVECTOR(XMMatrixDeterminant(V)), V);
-
-
-		XMMATRIX W = XMLoadFloat4x4(&MathHelper::Identity4x4());
-
-		XMMATRIX invWorld = XMMatrixInverse(new XMVECTOR(XMMatrixDeterminant(W)), W);
-
-		XMMATRIX toLocal = XMMatrixMultiply(invView, invWorld);
-
-		XMVECTOR rayOrigin = XMVector3TransformCoord(rayOrigin, toLocal);
-		XMVECTOR rayDir = XMVector3TransformNormal(rayDir, toLocal);
-		rayDir = XMVector3Normalize(rayDir);
-
-		float vx = rayDir.m128_f32[0];
-		float vy = rayDir.m128_f32[1];
-
-		XMFLOAT4X4 P = mProj;
-		float sx = (-vx * P(0, 0) + 1.0f) * (mClientWidth / 2.0f);
-		float sy = -(-vy * P(1, 1) - 1.0f) * (mClientHeight / 2.0f);
-
-		captions[L"SX"] = std::to_wstring(sx);
-		captions[L"SY"] = std::to_wstring(sy);
-
-		g->DrawRectangle({ sx - 64.f, sy - 64.f, sx + 64.f, sy + 64.f }, m_textBrush.Get());
-	}
-
-
-
+	g->DrawRectangle({ sx - 64.f * sz, sy - 64.f * sz, sx + 64.f * sz, sy + 64.f * sz }, m_textBrush.Get());
 	//if (captions.find(L"선택한 프로빈스") != captions.end())
 	{
 		//float x = std::stof(captions[L"선택한 프로빈스.x"]), y = std::stof(captions[L"선택한 프로빈스.z"]), z = 0.f;
@@ -1250,9 +1244,9 @@ void dex2rgb(float& r, float& g, float& b, const Color32& dex)
 }
 void dex2rgb(unsigned char& r, unsigned char& g, unsigned char& b, const Color32& dex)
 {
-	r = static_cast<UCHAR>((dex & 16711680) / 65536);
-	g = static_cast<UCHAR>((dex & 65208) / 256);
-	b = static_cast<UCHAR>((dex & 255));
+	r = static_cast<unsigned char>((dex & 16711680) / 65536);
+	g = static_cast<unsigned char>((dex & 65208) / 256);
+	b = static_cast<unsigned char>((dex & 255));
 }
 void dex2rgb(unsigned int& r, unsigned int& g, unsigned int& b, const Color32& dex)
 {
