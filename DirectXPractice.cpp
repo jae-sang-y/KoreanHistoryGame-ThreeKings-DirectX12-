@@ -120,7 +120,9 @@ private:
 	void GameStep();
 	void GameSave();
 	void GameLoad();
+	void GameClose();
 	void ProvinceMousedown(WPARAM btnState, ProvinceId id);
+	void CreateBrush();
 
 private:
 
@@ -129,6 +131,8 @@ private:
     ComPtr<ID3D12RootSignature> mRootSignature = nullptr;
 
 	ComPtr<ID3D12DescriptorHeap> mSrvDescriptorHeap = nullptr;
+
+	std::wofstream log_main;
 
 	std::unordered_map<std::string, std::unique_ptr<MeshGeometry>> mGeometries;
 	std::unordered_map<std::string, std::unique_ptr<Material>> mMaterials;
@@ -174,11 +178,11 @@ private:
 
 
 	struct Province {
-		std::string name;
+		std::wstring name;
 		Color32 color;
 		std::uint64_t p_num = 1;
-		float px, py, pz;
-		float ty;
+		XMFLOAT3 pixel;
+		XMFLOAT3 on3Dpos;
 
 
 		bool is_rebel = false;
@@ -188,8 +192,9 @@ private:
 		Province()
 		{
 		}
-		Province (std::string _name, Color32 _color, float _px, float _py, float _pz):name(_name), color(_color), px(_px), py(_py), pz(_pz), ty(_py)
+		Province (std::wstring _name, Color32 _color, XMFLOAT3 _pixel):name(_name), color(_color), pixel(_pixel)
 		{		
+
 		}
 	};
 	std::map<ProvinceId, Province> prov_stack;
@@ -246,6 +251,8 @@ MyApp::~MyApp()
 
 bool MyApp::Initialize()
 {
+	std::locale::global(std::locale(""));
+
     if(!D3DApp::Initialize())
         return false;
 
@@ -341,33 +348,46 @@ void MyApp::DrawUI()
 {
 	auto&& g = m_d2dDeviceContext;
 
-	g->DrawText(mUser.DebugText.c_str(), (UINT32)mUser.DebugText.length(), m_textFormat.Get(), D2D1::RectF(30.0f, 30.0f, 300.f, 100.f), m_textBrush.Get());
-
-	XMFLOAT3 s = Convert3Dto2D(XMLoadFloat3(new XMFLOAT3(10.f, 0.f, 0.f)));
-
-	float sx = s.x;
-	float sy = s.y;
-	float sz = 64.f / s.z;
-
-	captions[L"SX"] = std::to_wstring(sx);
-	captions[L"SY"] = std::to_wstring(sy);
-	captions[L"SZ"] = std::to_wstring(s.z);
-
-	g->DrawRectangle({ sx - 64.f * sz, sy - 64.f * sz, sx + 64.f * sz, sy + 64.f * sz }, m_textBrush.Get());
-	//if (captions.find(L"선택한 프로빈스") != captions.end())
+	g->DrawText(mUser.DebugText.c_str(), (UINT32)mUser.DebugText.length(), m_textFormat.Get(), D2D1::RectF(30.0f, 30.0f, 300.f, 100.f), m_Brush[L"White"].Get());
+	
+	//if (mRadius < 64.f)
 	{
-		//float x = std::stof(captions[L"선택한 프로빈스.x"]), y = std::stof(captions[L"선택한 프로빈스.z"]), z = 0.f;
-		
+		float aspect = 1.3f;
+		for (const auto& O : prov_stack)
+		{
+			XMFLOAT3 pos = O.second.on3Dpos;
+			pos.x /= 2;
+			pos.y /= 2;
+			pos.z /= 2;
+			XMFLOAT3 s = Convert3Dto2D(XMLoadFloat3(&pos));
 
+			float w = mClientHeight / 30.f * O.second.name.length() + 10.f;
+			float h = mClientHeight / 25.f;
+			float size = 130.0f / s.z;
 
-		{			
-			//g->DrawRectangle({ pos.x - 64.f, pos.y - 64.f, pos.x + 64.f, pos.y + 64.f }, m_textBrush.Get());
+			w *= size;
+			h *= size;
+
+			
+
+			g->FillRectangle(D2D1::RectF(
+				s.x - w / 2,
+				s.y - h / 2,
+				s.x + w / 2,
+				s.y + h / 2
+			), m_Brush[L"White"].Get());
+
+			
+			g->DrawText(O.second.name.c_str(), (UINT32)O.second.name.length(), m_textFormat.Get(), D2D1::RectF(
+				s.x - w / 2, 
+				s.y - h / 2,
+				s.x + w / 2,
+				s.y + h / 2
+			), m_Brush[L"Black"].Get(), D2D1_DRAW_TEXT_OPTIONS_CLIP);
 		}
 
 
 	}
-
-	
 
 }
 void MyApp::Draw(const GameTimer& gt)
@@ -441,11 +461,23 @@ void MyApp::Draw(const GameTimer& gt)
 
 void MyApp::GameSave()
 {
-	captions[L"파일 입출력"] = L"저장시작";
-	std::ofstream file("Saves/Nation");
-	file << "Hello World!" << std::endl;
+	captions[L"파일 입출력"] = L"보관시작";
+	std::wofstream file("UserData/Nation");
+
+
+	file << L"SAVE\tSTART" << std::endl;
+
+	for (const auto& O : prov_stack)
+	{
+		file << L"PROVINCE" << "L\t" << std::to_wstring(O.first) << std::endl;
+		file << L"RULER" << "L\t" << std::to_wstring(O.second.ruler) << std::endl;
+		file << L"OWNER" << "L\t" << std::to_wstring(O.second.owner) << std::endl;
+	}
+
+	file << L"SAVE\tEND" << std::endl;
+
 	file.close();
-	captions[L"파일 입출력"] = L"저장종료";
+	captions[L"파일 입출력"] = L"보관종료";
 }
 void MyApp::GameLoad()
 {
@@ -457,6 +489,8 @@ void MyApp::GameLoad()
 void MyApp::GameInit()
 {
 	srand((unsigned int)time(nullptr));
+
+	log_main.open("Log/main.log");
 
 	NationId nation_count = 0;
 	{
@@ -523,14 +557,19 @@ void MyApp::GameUpdate()
 	captions[L"CamPosZ"] = std::to_wstring(mEyetarget.m128_f32[2]);	
 }
 
+void MyApp::GameClose()
+{
+	log_main.close();
+}
+
 void MyApp::ProvinceMousedown(WPARAM btnState, ProvinceId id)
 {
 	auto prov = prov_stack.find(id);
 	if (prov == prov_stack.end())
 		return;
 	captions[L"선택한 프로빈스"] = std::to_wstring(id);
-	captions[L"선택한 프로빈스.x"] = std::to_wstring(2.f * prov->second.px / prov->second.p_num);
-	captions[L"선택한 프로빈스.z"] = std::to_wstring(2.f * prov->second.pz / prov->second.p_num);
+	captions[L"선택한 프로빈스.x"] = std::to_wstring(2.f * prov->second.on3Dpos.x / prov->second.p_num);
+	captions[L"선택한 프로빈스.z"] = std::to_wstring(2.f * prov->second.on3Dpos.z / prov->second.p_num);
 
 	if (btnState & MK_LBUTTON)
 	{
@@ -678,7 +717,7 @@ void MyApp::UILayerResize(ComPtr<ID3D12Resource>* ppRenderTargets, UINT width, U
 
 	ThrowIfFailed(m_d2dDevice->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE, &m_d2dDeviceContext));
 	m_d2dDeviceContext->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
-	ThrowIfFailed(m_d2dDeviceContext->CreateSolidColorBrush(D2D1::ColorF(D2D1::ColorF::White), &m_textBrush));
+	CreateBrush();
 
 	// Create DWrite text format objects.
 	const float fontSize = m_height / 30.0f;
@@ -691,20 +730,12 @@ void MyApp::UILayerResize(ComPtr<ID3D12Resource>* ppRenderTargets, UINT width, U
 		DWRITE_FONT_STYLE_NORMAL,
 		DWRITE_FONT_STRETCH_NORMAL,
 		fontSize,
-		L"en-us",
+		L"",
 		&m_textFormat));
 
 	ThrowIfFailed(m_textFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER));
 	ThrowIfFailed(m_textFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_NEAR));
-	ThrowIfFailed(m_dwriteFactory->CreateTextFormat(
-		L"Arial",
-		nullptr,
-		DWRITE_FONT_WEIGHT_NORMAL,
-		DWRITE_FONT_STYLE_NORMAL,
-		DWRITE_FONT_STRETCH_NORMAL,
-		smallFontSize,
-		L"en-us",
-		&m_textFormat));
+
 }
 void MyApp::UILayerInitialize(ID3D12Device* pDevice, ID3D12CommandQueue* pCommandQueue)
 {
@@ -778,12 +809,20 @@ void MyApp::UILayerInitialize(ID3D12Device* pDevice, ID3D12CommandQueue* pComman
 		ThrowIfFailed(m_d2dDevice->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE, &m_d2dDeviceContext));
 
 		m_d2dDeviceContext->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
-		ThrowIfFailed(m_d2dDeviceContext->CreateSolidColorBrush(D2D1::ColorF(D2D1::ColorF::White), &m_textBrush));
+
+		CreateBrush();
 
 		ThrowIfFailed(DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory), &m_dwriteFactory));
 	}
 }
 
+void MyApp::CreateBrush()
+{
+	ThrowIfFailed(m_d2dDeviceContext->CreateSolidColorBrush(
+		D2D1::ColorF(D2D1::ColorF::White), &m_Brush[L"White"]));
+	ThrowIfFailed(m_d2dDeviceContext->CreateSolidColorBrush(
+		D2D1::ColorF(D2D1::ColorF::Black), &m_Brush[L"Black"]));
+}
 
 void MyApp::OnMouseDown(WPARAM btnState, int x, int y)
 {
@@ -1258,15 +1297,15 @@ void dex2rgb(unsigned int& r, unsigned int& g, unsigned int& b, const Color32& d
 void MyApp::BuildLandGeometry()
 {
 	std::ifstream file("Map/map.bmp");
-	std::ifstream prov_list("Map/prov.txt");
+	std::wifstream prov_list("Map/prov.txt");
 	std::ifstream prov_file("Map/prov.bmp");
 	assert(file && prov_file && prov_list);
 	{
-		std::map<Color32, std::pair<ProvinceId, std::string>> prov_key;
+		std::map<Color32, std::pair<ProvinceId, std::wstring>> prov_key;
 		
 		{
-			std::string name, index, r, g, b;
-			for (std::string line; std::getline(prov_list, line); )
+			std::wstring name, index, r, g, b;
+			for (std::wstring line; std::getline(prov_list, line); )
 			{
 				for (size_t i = 0; i < line.size(); ++i)
 				{
@@ -1365,17 +1404,13 @@ void MyApp::BuildLandGeometry()
 					mLandVertices[x + y * w].Prov = search->second.first;
 					if (auto search_stack = prov_stack.find(search->second.first); search_stack == prov_stack.end())
 					{
-						prov_stack.insert(std::make_pair(search->second.first, Province(search->second.second,dex, mLandVertices[x + y * w].Pos.x, mLandVertices[x + y * w].Pos.y, mLandVertices[x + y * w].Pos.z)));
+						prov_stack.insert(std::make_pair(search->second.first, Province(search->second.second,dex, XMFLOAT3(mLandVertices[x + y * w].Pos.x, mLandVertices[x + y * w].Pos.y, mLandVertices[x + y * w].Pos.z))));
 					}
 					else
 					{
-						search_stack->second.px += mLandVertices[x + y * w].Pos.x;
-						search_stack->second.py += mLandVertices[x + y * w].Pos.y;
-						if (search_stack->second.ty < mLandVertices[x + y * w].Pos.y)
-						{
-							search_stack->second.ty = mLandVertices[x + y * w].Pos.y;
-						}
-						search_stack->second.pz += mLandVertices[x + y * w].Pos.z;
+						search_stack->second.pixel.x += mLandVertices[x + y * w].Pos.x;
+						search_stack->second.pixel.y += mLandVertices[x + y * w].Pos.y;
+						search_stack->second.pixel.z += mLandVertices[x + y * w].Pos.z;
 						++search_stack->second.p_num;
 					}
 				}
@@ -1429,6 +1464,20 @@ void MyApp::BuildLandGeometry()
 			OutputDebugStringA(("Unregisted Color (" + std::to_string(r) + ", " + std::to_string(g) + ", " + std::to_string(b) + ") x " + std::to_string(O.second.second) + " : It looks like (" + std::to_string(O.second.first.x) + ", " + std::to_string(O.second.first.y) + ", " + std::to_string(O.second.first.z) + ")\n").c_str());
 		}
 
+		for (auto& O : prov_stack)
+		{
+			int x = (int)(1.f * O.second.pixel.x / O.second.p_num + (map_w - 1.f) / 2.f);
+			int y = (int)(1.f * O.second.pixel.z / O.second.p_num + (map_h - 1.f) / 2.f);
+
+
+			if (x >= 0 && x < map_w && y >= 0 && y < map_h)
+			{
+				O.second.on3Dpos.x = 2.f * O.second.pixel.x / O.second.p_num;
+				O.second.on3Dpos.y = 2.f * mLandVertices.at(x + map_w * y).Pos.y - 2.f;
+				O.second.on3Dpos.z = 2.f * O.second.pixel.z / O.second.p_num;
+			}
+		}
+
 		concurrency::parallel_for((size_t)1, h - 1, [&](size_t i)
 		{
 			for (size_t j = 1; j < w - 1; ++j)
@@ -1449,6 +1498,7 @@ void MyApp::BuildLandGeometry()
 				//XMStoreFloat3(&mTangentX[i*mNumCols + j], T);
 			}
 		});
+
 
 
 
@@ -1818,7 +1868,7 @@ void MyApp::BuildRenderItems()
 	float border_wdith = 10.f;
 	float border_height = 2.f;
 
-	/*{
+	{
 		auto newboxRitem = boxRitem;
 		auto newboxRitem_u = std::make_unique<RenderItem>(newboxRitem);
 
@@ -1869,7 +1919,7 @@ void MyApp::BuildRenderItems()
 
 		mRitemLayer[(int)RenderLayer::Opaque].push_back(newboxRitem_u.get());
 		mAllRitems.push_back(std::move(newboxRitem_u));
-	}*/
+	}
 	{
 		auto newboxRitem = boxRitem;
 		auto newboxRitem_u = std::make_unique<RenderItem>(newboxRitem);
@@ -1882,65 +1932,28 @@ void MyApp::BuildRenderItems()
 		mRitemLayer[(int)RenderLayer::Opaque].push_back(newboxRitem_u.get());
 		mAllRitems.push_back(std::move(newboxRitem_u));
 	}
-	/*for (size_t a = 0; a < map_w; ++a)
+
+	for (const auto& O : prov_stack)
 	{
-		for (size_t b = 0; b < map_h; ++b)
-		{
-			const auto& P = mLandVertices.at(a + b * map_w);
-			OutputDebugStringA(("(" + std::to_string(a) + ", " + std::to_string(b) + ") => (" + std::to_string(P.Pos.x + (map_w - 1.f) / 2.f) + ", " + std::to_string(P.Pos.z + (map_h - 1.f) / 2.f) + ")\n").c_str());
-		}
-	}*/
+		auto newboxRitem = boxRitem;
+		auto newboxRitem_u = std::make_unique<RenderItem>(newboxRitem);
 
-	//for (const auto& O : prov_stack)
-	//{
-	//	auto newboxRitem = boxRitem;
-	//	auto newboxRitem_u = std::make_unique<RenderItem>(newboxRitem);
+		newboxRitem_u->ObjCBIndex = all_CBIndex++;
 
-	//	
-	//	int x = (int)(1.f * O.second.px / O.second.p_num + (map_w - 1.f) / 2.f);
-	//	int y = (int)(1.f * O.second.pz / O.second.p_num + (map_h - 1.f) / 2.f);
+		XMStoreFloat4x4(&newboxRitem_u->World,
+			XMMatrixTranslation(
+				O.second.on3Dpos.x,
+				O.second.on3Dpos.y,
+				O.second.on3Dpos.z
+			)
+			+
+			XMMatrixScaling(5.0f, 5.0f, 5.0f)
+		);
 
+		mRitemLayer[(int)RenderLayer::Opaque].push_back(newboxRitem_u.get());
+		mAllRitems.push_back(std::move(newboxRitem_u));
+	}
 
-	//	//int x = std::roundf(2.f * O.second.px / O.second.p_num + (map_w - 1) / 2.f);
-	//	//int y = std::roundf(2.f * O.second.pz / O.second.p_num + (map_h - 1) / 2.f);
-	//	
-	//	newboxRitem_u->ObjCBIndex = all_CBIndex++;
-
-	//	if (x >= 0 && x < map_w && y >= 0 && y < map_h)
-	//	{
-	//		//OutputDebugStringA((std::to_string(mLandVertices.at(x + map_w * y).Pos.x - 2.f * O.second.px / O.second.p_num) + " ; " + std::to_string(mLandVertices.at(x + map_w * y).Pos.z - 2.f * O.second.pz / O.second.p_num) + "\n").c_str());
-	//		XMStoreFloat4x4(&newboxRitem_u->World,
-	//			XMMatrixTranslation(
-	//				2.f * O.second.px / O.second.p_num,
-	//				2.f * mLandVertices.at(x + map_w * y).Pos.y - 2.f,
-	//				2.f * O.second.pz / O.second.p_num)
-	//			+
-	//			XMMatrixScaling(5.0f, 5.0f, 5.0f)
-	//		);
-	//	}
-
-	//	mRitemLayer[(int)RenderLayer::Opaque].push_back(newboxRitem_u.get());
-	//	mAllRitems.push_back(std::move(newboxRitem_u));
-	//}
-		
-	/*auto pickedRitem = std::make_unique<RenderItem>();
-	pickedRitem->World = MathHelper::Identity4x4();
-	pickedRitem->TexTransform = MathHelper::Identity4x4();
-	pickedRitem->ObjCBIndex = 1;
-	pickedRitem->Mat = mMaterials["wirefence"].get();
-	pickedRitem->Geo = mGeometries["boxGeo"].get();
-	pickedRitem->PrimitiveType = D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
-
-	pickedRitem->Visible = false;
-
-	pickedRitem->IndexCount = 0;
-	pickedRitem->StartIndexLocation = 0;
-	pickedRitem->BaseVertexLocation = 0;
-	mPickedRitem = pickedRitem.get();
-	mRitemLayer[(int)RenderLayer::Opaque].push_back(pickedRitem.get());*/
-
-
-	//mAllRitems.push_back(std::move(pickedRitem));
     mAllRitems.push_back(std::move(wavesRitem));
     mAllRitems.push_back(std::move(gridRitem));
 

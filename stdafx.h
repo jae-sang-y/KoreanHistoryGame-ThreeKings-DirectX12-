@@ -34,3 +34,5 @@
 
 #include <functional>
 #include <algorithm>
+
+#include <locale>

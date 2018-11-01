@@ -176,7 +176,12 @@ void D3DApp::OnResize()
 			m_d2dRenderTargets[i].Reset();
 			m_wrappedRenderTargets[i].Reset();
 		}
-		m_textBrush.Reset();
+
+		for (auto& O : m_Brush)
+		{
+			O.second.Reset();
+		}
+
 		m_d2dDeviceContext.Reset();
 		m_textFormat.Reset();
 		m_dwriteFactory.Reset();

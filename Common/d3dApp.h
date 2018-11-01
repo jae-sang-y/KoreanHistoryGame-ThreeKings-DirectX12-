@@ -153,7 +153,9 @@ protected:
 	Microsoft::WRL::ComPtr<ID2D1DeviceContext2> m_d2dDeviceContext;
 	std::vector<Microsoft::WRL::ComPtr<ID3D11Resource>> m_wrappedRenderTargets;
 	std::vector<Microsoft::WRL::ComPtr<ID2D1Bitmap1>> m_d2dRenderTargets;
-	Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> m_textBrush;
+
+	std::unordered_map<std::wstring, Microsoft::WRL::ComPtr<ID2D1SolidColorBrush>>m_Brush;
+
 	Microsoft::WRL::ComPtr<IDWriteTextFormat> m_textFormat;
 
 	bool m_fullscreenMode = false;
