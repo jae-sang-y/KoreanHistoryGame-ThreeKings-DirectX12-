@@ -253,6 +253,9 @@ bool MyApp::Initialize()
 {
 	std::locale::global(std::locale(""));
 
+	srand((unsigned int)time(nullptr));
+	log_main.open("Log/main.log");
+
     if(!D3DApp::Initialize())
         return false;
 
@@ -348,42 +351,49 @@ void MyApp::DrawUI()
 {
 	auto&& g = m_d2dDeviceContext;
 
-	g->DrawText(mUser.DebugText.c_str(), (UINT32)mUser.DebugText.length(), m_textFormat.Get(), D2D1::RectF(30.0f, 30.0f, 300.f, 100.f), m_Brush[L"White"].Get());
+	g->DrawText(mUser.DebugText.c_str(), (UINT32)mUser.DebugText.length(), m_textFormat[L"Debug"].Get(), D2D1::RectF(30.0f, 30.0f, 300.f, 100.f), m_Brush[L"White"].Get());
 	
 	//if (mRadius < 64.f)
 	{
-		float aspect = 1.3f;
 		for (const auto& O : prov_stack)
 		{
 			XMFLOAT3 pos = O.second.on3Dpos;
-			pos.x /= 2;
-			pos.y /= 2;
-			pos.z /= 2;
+			pos.x /= 2.f;
+			pos.y /= 2.f;
+			pos.z /= 2.f;
+			pos.y += 3.f;
 			XMFLOAT3 s = Convert3Dto2D(XMLoadFloat3(&pos));
 
 			float w = mClientHeight / 30.f * O.second.name.length() + 10.f;
 			float h = mClientHeight / 25.f;
-			float size = 130.0f / s.z;
+			float size = 50.0f / s.z;
 
-			w *= size;
-			h *= size;
+			if (size > 0.f)
+			{
+				w *= size;
+				h *= size;
 
-			
+				ThrowIfFailed(m_dwriteFactory->CreateTextLayout(
+					O.second.name.c_str(), (UINT32)O.second.name.length(),
+					m_textFormat[L"Above Province"].Get(),
+					1.f * w, 1.f * h,
+					m_textLayout.GetAddressOf()
+				));
+				m_textLayout->SetFontSize(h / 1.3f, {0U,  (UINT32)O.second.name.length() });
 
-			g->FillRectangle(D2D1::RectF(
-				s.x - w / 2,
-				s.y - h / 2,
-				s.x + w / 2,
-				s.y + h / 2
-			), m_Brush[L"White"].Get());
+				
 
-			
-			g->DrawText(O.second.name.c_str(), (UINT32)O.second.name.length(), m_textFormat.Get(), D2D1::RectF(
-				s.x - w / 2, 
-				s.y - h / 2,
-				s.x + w / 2,
-				s.y + h / 2
-			), m_Brush[L"Black"].Get(), D2D1_DRAW_TEXT_OPTIONS_CLIP);
+				g->FillRectangle(D2D1::RectF(
+					s.x - w / 2.f,
+					s.y - h / 2.f,
+					s.x + w / 2.f,
+					s.y + h / 2.f
+				), m_Brush[L"White"].Get());
+
+				g->DrawTextLayout(D2D1::Point2F(s.x - w / 2.f, s.y - h / 2.f), m_textLayout.Get(),
+					m_Brush[L"Black"].Get(), D2D1_DRAW_TEXT_OPTIONS_CLIP
+				);
+			}
 		}
 
 
@@ -488,9 +498,6 @@ void MyApp::GameLoad()
 
 void MyApp::GameInit()
 {
-	srand((unsigned int)time(nullptr));
-
-	log_main.open("Log/main.log");
 
 	NationId nation_count = 0;
 	{
@@ -723,18 +730,33 @@ void MyApp::UILayerResize(ComPtr<ID3D12Resource>* ppRenderTargets, UINT width, U
 	const float fontSize = m_height / 30.0f;
 	const float smallFontSize = m_height / 40.0f;
 
+
 	ThrowIfFailed(m_dwriteFactory->CreateTextFormat(
-		L"Arial",
+		L"EBSJSK",
+		m_dwFontColl.Get(),
+		DWRITE_FONT_WEIGHT_NORMAL,
+		DWRITE_FONT_STYLE_NORMAL,
+		DWRITE_FONT_STRETCH_NORMAL,
+		fontSize,
+		L"",
+		&m_textFormat[L"Above Province"]));
+
+	ThrowIfFailed(m_textFormat[L"Above Province"]->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER));
+	ThrowIfFailed(m_textFormat[L"Above Province"]->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_NEAR));
+
+
+	ThrowIfFailed(m_dwriteFactory->CreateTextFormat(
+		L"Consolas",
 		nullptr,
 		DWRITE_FONT_WEIGHT_NORMAL,
 		DWRITE_FONT_STYLE_NORMAL,
 		DWRITE_FONT_STRETCH_NORMAL,
 		fontSize,
 		L"",
-		&m_textFormat));
+		&m_textFormat[L"Debug"]));
 
-	ThrowIfFailed(m_textFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER));
-	ThrowIfFailed(m_textFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_NEAR));
+	ThrowIfFailed(m_textFormat[L"Debug"]->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER));
+	ThrowIfFailed(m_textFormat[L"Debug"]->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_NEAR));
 
 }
 void MyApp::UILayerInitialize(ID3D12Device* pDevice, ID3D12CommandQueue* pCommandQueue)
@@ -814,6 +836,53 @@ void MyApp::UILayerInitialize(ID3D12Device* pDevice, ID3D12CommandQueue* pComman
 
 		ThrowIfFailed(DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory), &m_dwriteFactory));
 	}
+	
+	ComPtr<IDWriteFontFile> tFontFile = nullptr;
+	ComPtr<IDWriteFontFileLoader> fontFileLoader = nullptr;
+	ComPtr<IDWriteFontCollectionLoader> fontCollLoader = nullptr;
+
+	ThrowIfFailed(AddFontResourceW(L"Resource\\Fonts\\Ruzicka TypeK.ttf"));
+	ThrowIfFailed(m_dwriteFactory->GetSystemFontCollection(m_dwFontColl.GetAddressOf(), false))
+
+	//for (UINT32 i = 0U; i < m_dwFontColl->GetFontFamilyCount(); ++i)
+	//{
+	//	//OutputDebugStringW(std::to_wstring(i).c_str());
+	//	//OutputDebugStringW(L" : try\n");
+	//	IDWriteFontFamily* ff = nullptr;
+	//	m_dwFontColl->GetFontFamily(i, &ff);
+
+	//	IDWriteLocalizedStrings* pFamilyNames = nullptr;
+
+	//	ff->GetFamilyNames(&pFamilyNames);
+
+	//	UINT32 index = 0U;
+
+	//	wchar_t localeName[LOCALE_NAME_MAX_LENGTH];
+	//	BOOL exists = false;
+
+	//	GetUserDefaultLocaleName(localeName, LOCALE_NAME_MAX_LENGTH);
+
+	//	pFamilyNames->FindLocaleName(localeName, &index, &exists);
+
+	//	if (!exists)
+	//	{
+	//		pFamilyNames->FindLocaleName(L"en-us", &index, &exists);
+	//	}
+
+	//	if (!exists)
+	//		index = 0U;
+
+	//	UINT32 length = 0U;
+
+	//	pFamilyNames->GetStringLength(index, &length);
+
+	//	std::vector<wchar_t> name(length + 1);
+	//	pFamilyNames->GetString(index, name.data(), length + 1U);
+
+	//	//OutputDebugStringW(name.data());
+	//	//OutputDebugStringW(L"\n");
+	//}
+
 }
 
 void MyApp::CreateBrush()

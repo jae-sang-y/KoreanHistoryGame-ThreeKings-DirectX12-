@@ -180,10 +180,18 @@ void D3DApp::OnResize()
 		for (auto& O : m_Brush)
 		{
 			O.second.Reset();
+			m_Brush.erase(O.first);
 		}
 
+		for (auto& O : m_textFormat)
+		{
+			O.second.Reset();
+			m_textFormat.erase(O.first);
+		}
+
+		m_dwFontColl.Reset();
+
 		m_d2dDeviceContext.Reset();
-		m_textFormat.Reset();
 		m_dwriteFactory.Reset();
 		m_d2dDevice.Reset();
 		m_d2dFactory.Reset();
@@ -762,22 +770,25 @@ void D3DApp::LogOutputDisplayModes(IDXGIOutput* output, DXGI_FORMAT format)
     UINT flags = 0;
 
     // Call with nullptr to get list count.
+
+
     output->GetDisplayModeList(format, flags, &count, nullptr);
 
-    std::vector<DXGI_MODE_DESC> modeList(count);
-    output->GetDisplayModeList(format, flags, &count, &modeList[0]);
+	m_modeList.resize(count);
 
-    for(auto& x : modeList)
+    output->GetDisplayModeList(format, flags, &count, m_modeList.data());
+
+    for(auto& x : m_modeList)
     {
         UINT n = x.RefreshRate.Numerator;
         UINT d = x.RefreshRate.Denominator;
-        /*std::wstring text =
+        std::wstring text =
             L"Width = " + std::to_wstring(x.Width) + L" " +
             L"Height = " + std::to_wstring(x.Height) + L" " +
             L"Refresh = " + std::to_wstring(n) + L"/" + std::to_wstring(d) +
             L"\n";
 
-        ::OutputDebugString(text.c_str());*/
+        ::OutputDebugString(text.c_str());
     }
 }
 
@@ -802,10 +813,12 @@ void D3DApp::ToggleFullscreenWindow()
 		ThrowIfFailed(mSwapChain->GetContainingOutput(&pOutput));
 		DXGI_OUTPUT_DESC Desc;
 		ThrowIfFailed(pOutput->GetDesc(&Desc));
-
-		ShowWindow(m_hwnd, SW_NORMAL);
 		
-
+		ShowWindow(m_hwnd, SW_NORMAL);
+		mBeforeFullscreenClientWidth = mClientWidth;
+		mBeforeFullscreenClientHeight = mClientHeight;
+		mClientWidth = m_windowRect.right - m_windowRect.left;
+		mClientHeight = m_windowRect.bottom - m_windowRect.top;
 	}
 	else
 	{
@@ -832,9 +845,12 @@ void D3DApp::ToggleFullscreenWindow()
 			mClientHeight,
 			SWP_FRAMECHANGED | SWP_NOACTIVATE);
 
-
 		ShowWindow(m_hwnd, SW_MAXIMIZE);
+		
+		mClientWidth = mBeforeFullscreenClientWidth;
+		mClientHeight = mBeforeFullscreenClientHeight;
 	}
+	OnResize();
 	m_fullscreenMode = !m_fullscreenMode;
 
 }

@@ -145,6 +145,9 @@ protected:
 	int mClientWidth = 1280;
 	int mClientHeight = 800;
 
+	int mBeforeFullscreenClientWidth = 1280;
+	int mBeforeFullscreenClientHeight = 800;
+
 	Microsoft::WRL::ComPtr<ID3D11DeviceContext> m_d3d11DeviceContext;
 	Microsoft::WRL::ComPtr<ID3D11On12Device> m_d3d11On12Device;
 	Microsoft::WRL::ComPtr<IDWriteFactory> m_dwriteFactory;
@@ -154,9 +157,13 @@ protected:
 	std::vector<Microsoft::WRL::ComPtr<ID3D11Resource>> m_wrappedRenderTargets;
 	std::vector<Microsoft::WRL::ComPtr<ID2D1Bitmap1>> m_d2dRenderTargets;
 
-	std::unordered_map<std::wstring, Microsoft::WRL::ComPtr<ID2D1SolidColorBrush>>m_Brush;
+	Microsoft::WRL::ComPtr<IDWriteFontCollection> m_dwFontColl;
+	std::unordered_map<std::wstring, Microsoft::WRL::ComPtr<ID2D1SolidColorBrush>> m_Brush;
+	std::unordered_map<std::wstring, Microsoft::WRL::ComPtr<IDWriteTextFormat>> m_textFormat;
 
-	Microsoft::WRL::ComPtr<IDWriteTextFormat> m_textFormat;
+	Microsoft::WRL::ComPtr<IDWriteTextLayout> m_textLayout;
+
+	std::vector<DXGI_MODE_DESC> m_modeList;
 
 	bool m_fullscreenMode = false;
 	bool uiFirst = true;
