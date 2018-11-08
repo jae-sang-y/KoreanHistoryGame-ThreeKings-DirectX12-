@@ -1,6 +1,7 @@
 #pragma once
 
 #include <windows.h>
+#include <wincodec.h>
 #include <wrl.h>
 #include <dxgi1_4.h>
 #include <dxgidebug.h>

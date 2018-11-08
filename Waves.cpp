@@ -106,8 +106,8 @@ void Waves::Update(float tt)
 			float a = 1.f;
 			for (const auto& O : vec)
 			{
-				r = sqrtf(powf(i - O.x - wave_w / 2.f, 2) + powf(-O.y, 2) + powf(j - O.z - wave_h / 2.f, 2));
-				P = std::max(0.1f * sinf(r / sqrtf(a) + tt * 10.f) / log(r + 3.14f), P);
+				r = sqrtf(powf(i - O.x - wave_w / 2.f, 2) + powf(-O.y, 2) + powf(j - O.z - wave_h / 2.f, 2)) * 3.f;
+				P = std::max(0.3f * sinf(r / sqrtf(a) + tt * 10.f) / log(r + 3.14f), P);
 				a += 0.2f;
 			}
 		}

@@ -80,6 +80,9 @@
     <ClInclude Include="stdafx.h">
       <Filter>App</Filter>
     </ClInclude>
+    <ClInclude Include="YTML.h">
+      <Filter>App</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="Common">

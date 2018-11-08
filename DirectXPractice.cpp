@@ -7,7 +7,7 @@
 #include "Common/UploadBuffer.h"
 #include "Common/GeometryGenerator.h"
 #include "Waves.h"
-
+#include "YTML.h"
 
 using Microsoft::WRL::ComPtr;
 using namespace DirectX;
@@ -65,6 +65,30 @@ enum class RenderLayer : int
 	Province,
 	Count
 };
+template<typename T>
+Color32 rgb2dex(const T& r, const T& g, const T& b)
+{
+	return ((r * 256) + g) * 256 + b;
+}
+
+void dex2rgb(float& r, float& g, float& b, const Color32& dex)
+{
+	r = ((dex & 16711680) / 65536) / 255.f;
+	g = ((dex & 65208) / 256) / 255.f;
+	b = (dex & 255) / 255.f;
+}
+void dex2rgb(unsigned char& r, unsigned char& g, unsigned char& b, const Color32& dex)
+{
+	r = static_cast<unsigned char>((dex & 16711680) / 65536);
+	g = static_cast<unsigned char>((dex & 65208) / 256);
+	b = static_cast<unsigned char>((dex & 255));
+}
+void dex2rgb(unsigned int& r, unsigned int& g, unsigned int& b, const Color32& dex)
+{
+	r = (dex & 16711680) / 65536;
+	g = (dex & 65208) / 256;
+	b = (dex & 255);
+}
 
 class MyApp : public D3DApp
 {
@@ -108,13 +132,14 @@ private:
     void BuildFrameResources();
     void BuildMaterials();
     void BuildRenderItems();
+	void BuildImage();
     void DrawRenderItems(ID3D12GraphicsCommandList* cmdList, const std::vector<RenderItem*>& ritems);
 	void Pick(WPARAM btnState, int sx, int sy);
 	void LoadSizeDependentResources();
 	std::array<const CD3DX12_STATIC_SAMPLER_DESC, 6> GetStaticSamplers();
 	const XMFLOAT3& MyApp::Convert3Dto2D(XMVECTOR pos);
-	void UILayerInitialize(ID3D12Device* pDevice, ID3D12CommandQueue* pCommandQueue);
-	void UILayerResize(ComPtr<ID3D12Resource>* ppRenderTargets, UINT width, UINT height);
+	void UILayerInitialize();
+	void UILayerResize();
 	void GameInit();
 	void GameUpdate();
 	void GameStep();
@@ -123,6 +148,8 @@ private:
 	void GameClose();
 	void ProvinceMousedown(WPARAM btnState, ProvinceId id);
 	void CreateBrush();
+
+	void Query(const std::wstring& query);
 
 private:
 
@@ -203,17 +230,37 @@ private:
 	{	
 		XMFLOAT4 MainColor = { 0.f, 0.f, 0.f, 0.f };
 		std::wstring MainName = L"오류";
-
-
 	};
 
 	XMVECTOR mEyetarget = XMVectorSet(0.0f, 15.0f, 0.0f, 0.0f);
 
 	std::unordered_map<NationId, std::unique_ptr<Nation>>  nations;
 	std::unordered_map<std::wstring, std::wstring> captions;
+	std::unordered_map<std::wstring, HBITMAP> mBitmap;
+
+	YTML::DrawItemList m_DrawItems;
 
 	float mEyeMoveX = 0.f;
 	float mEyeMoveZ = 0.f;
+	
+	bool mUI_isInitial = false;
+
+	struct Query
+	{
+		bool enable = false;
+
+		bool isString = false;
+		bool isLineComment = false;
+		bool isComment = false;
+
+		size_t pos;
+		std::vector<std::wstring> word;
+		std::wstring index;
+
+		ProvinceId tag_prov;
+		decltype(prov_stack)::iterator tag_prov_it;
+
+	} mQuery;
 };
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE prevInstance, PSTR cmdLine, int showCmd)
@@ -278,6 +325,7 @@ bool MyApp::Initialize()
     BuildRenderItems();
     BuildFrameResources();
     BuildPSOs();
+	
 
     // Execute the initialization commands.
     ThrowIfFailed(mCommandList->Close());
@@ -286,7 +334,7 @@ bool MyApp::Initialize()
 
     // Wait until initialization is complete.
     FlushCommandQueue();
-
+	
 	GameInit();
 
     return true;
@@ -294,6 +342,8 @@ bool MyApp::Initialize()
  
 void MyApp::OnResize()
 {
+
+	mUI_isInitial = false;
     D3DApp::OnResize();
 
     // The window resized, so update the aspect ratio and recompute the projection matrix.
@@ -301,6 +351,44 @@ void MyApp::OnResize()
     XMStoreFloat4x4(&mProj, P);
 }
 
+void MyApp::BuildImage()
+{
+	ThrowIfFailed(CoCreateInstance(
+		CLSID_WICImagingFactory,
+		nullptr,
+		CLSCTX_INPROC_SERVER,
+		IID_PPV_ARGS(m_d2d->pIWICFactory.GetAddressOf())
+	));
+
+	ComPtr<IWICBitmapDecoder> pDecoder = nullptr;
+	ComPtr<IWICBitmapFrameDecode> pFrame = nullptr;
+
+	ThrowIfFailed(m_d2d->pIWICFactory->CreateDecoderFromFilename(
+		LR"(cursor.png)",                      // Image to be decoded
+		NULL,                            // Do not prefer a particular vendor
+		GENERIC_READ,                    // Desired read access to the file
+		WICDecodeMetadataCacheOnDemand,  // Cache metadata when needed
+		pDecoder.GetAddressOf()                        // Pointer to the decoder
+	));
+
+	// Retrieve the first frame of the image from the decoder
+
+	ThrowIfFailed(pDecoder->GetFrame(0, pFrame.GetAddressOf()));
+
+	m_d2d->pConvertedSourceBitmap.Reset();
+	ThrowIfFailed(m_d2d->pIWICFactory->CreateFormatConverter(m_d2d->pConvertedSourceBitmap.GetAddressOf()));
+
+	ThrowIfFailed(m_d2d->pConvertedSourceBitmap->Initialize(
+		pFrame.Get(),                          // Input bitmap to convert
+		GUID_WICPixelFormat32bppPBGRA,   // Destination pixel format
+		WICBitmapDitherTypeNone,         // Specified dither pattern
+		nullptr,                         // Specify a particular palette 
+		0.f,                             // Alpha threshold
+		WICBitmapPaletteTypeCustom       // Palette translation type
+	));
+
+
+}
 
 void MyApp::Update(const GameTimer& gt)
 {
@@ -349,56 +437,114 @@ const XMFLOAT3& MyApp::Convert3Dto2D(XMVECTOR pos)
 
 void MyApp::DrawUI()
 {
-	auto&& g = m_d2dDeviceContext;
+	auto& g = m_d2d->d2dDeviceContext;
 
-	g->DrawText(mUser.DebugText.c_str(), (UINT32)mUser.DebugText.length(), m_textFormat[L"Debug"].Get(), D2D1::RectF(30.0f, 30.0f, 300.f, 100.f), m_Brush[L"White"].Get());
+	if (m_d2d->pConvertedSourceBitmap.Get() != nullptr && m_d2d->pD2DBitmap.Get() == nullptr)
+	{
+		ThrowIfFailed(g->CreateBitmapFromWicBitmap(m_d2d->pConvertedSourceBitmap.Get(), nullptr, m_d2d->pD2DBitmap.GetAddressOf()));
+	}
+	if (m_d2d->pD2DBitmap.Get() != nullptr)
+	{
+		g->DrawBitmap(m_d2d->pD2DBitmap.Get(), D2D1::RectF(0.f, 0.f, 400.f, 300.f));
+	}
+	
+
+	g->DrawText(mUser.DebugText.c_str(), (UINT32)mUser.DebugText.length(), 
+		m_d2d->textFormat[L"Debug"].Get(), D2D1::RectF(0.0f, 0.0f, mClientWidth / 3.f, 1.f * mClientHeight),
+		m_d2d->Brush[L"White"].Get());
 	
 	//if (mRadius < 64.f)
+
+	D2D1_POINT_2F point;
+	D2D1_RECT_F rect;
+	D2D1_SIZE_F size;
+
+	for (auto& O : m_DrawItems.data)
 	{
-		for (const auto& O : prov_stack)
+		auto& A = O->Attribute;
+		if (A[L"enable"] == L"disable")
+			continue;
+
+		try
 		{
-			XMFLOAT3 pos = O.second.on3Dpos;
-			pos.x /= 2.f;
-			pos.y /= 2.f;
-			pos.z /= 2.f;
-			pos.y += 3.f;
-			XMFLOAT3 s = Convert3Dto2D(XMLoadFloat3(&pos));
+			m_d2d->Brush[L"Temp"]->SetColor(D2D1::ColorF(Float(A[L"color-r"]), Float(A[L"color-g"]), Float(A[L"color-b"])));
+			m_d2d->Brush[L"Temp"]->SetOpacity(Float(A[L"opacity"]));
+			
+			point.x = Float(A[L"left"]);
+			point.y = Float(A[L"top"]);
 
-			float w = mClientHeight / 30.f * O.second.name.length() + 10.f;
-			float h = mClientHeight / 25.f;
-			float size = 50.0f / s.z;
-
-			if (size > 0.f)
+			size.width = Float(A[L"width"]);
+			size.height = Float(A[L"height"]);
+			
+			if (A[L"horizontal-align"] == L"center")
 			{
-				w *= size;
-				h *= size;
+				rect.left = point.x - size.width / 2.f;
+				rect.right = point.x + size.width / 2.f;
+			}
+			else if (A[L"horizontal-align"] == L"right")
+			{
+				rect.left = point.x - size.width;
+				rect.right = point.x;
+			}
+			else
+			{
+				rect.left = point.x;
+				rect.right = point.x + size.width;
+			}
 
-				ThrowIfFailed(m_dwriteFactory->CreateTextLayout(
-					O.second.name.c_str(), (UINT32)O.second.name.length(),
-					m_textFormat[L"Above Province"].Get(),
-					1.f * w, 1.f * h,
-					m_textLayout.GetAddressOf()
+			if (A[L"vertical-align"] == L"center")
+			{
+				rect.top = point.y - size.height / 2.f;
+				rect.bottom = point.y + size.height / 2.f;
+			}
+			else if (A[L"vertical-align"] == L"top")
+			{
+				rect.top = point.y - size.height;
+				rect.bottom = point.y;
+			}
+			else
+			{
+				rect.top = point.y;
+				rect.bottom = point.y + size.height;
+			}
+
+
+			if (A[L"tag"] == L"div")
+			{
+				g->FillRectangle(rect, m_d2d->Brush[L"Temp"].Get());
+			}
+			else if (A[L"tag"] == L"a")
+			{
+				m_d2d->textLayout.Reset();
+				ThrowIfFailed(m_d2d->dwriteFactory->CreateTextLayout(
+					A[L"text"].c_str(), (UINT32)A[L"text"].length(),
+					m_d2d->textFormat[L"Above Province"].Get(),
+					size.width, size.height,
+					m_d2d->textLayout.GetAddressOf()
 				));
-				m_textLayout->SetFontSize(h / 1.3f, {0U,  (UINT32)O.second.name.length() });
-
+				m_d2d->textLayout->SetFontSize(size.height, { 0U,  (UINT32)A[L"text"].length() });
 				
-
-				g->FillRectangle(D2D1::RectF(
-					s.x - w / 2.f,
-					s.y - h / 2.f,
-					s.x + w / 2.f,
-					s.y + h / 2.f
-				), m_Brush[L"White"].Get());
-
-				g->DrawTextLayout(D2D1::Point2F(s.x - w / 2.f, s.y - h / 2.f), m_textLayout.Get(),
-					m_Brush[L"Black"].Get(), D2D1_DRAW_TEXT_OPTIONS_CLIP
+				g->DrawTextLayout(D2D1::Point2F(rect.left, rect.top), m_d2d->textLayout.Get(),
+					m_d2d->Brush[L"Temp"].Get(), D2D1_DRAW_TEXT_OPTIONS_CLIP
 				);
 			}
+			else if (A[L"tag"] == L"img") 
+			{
+				//g->DrawBitmap(,rect, Float(A[L"opacity"]));
+			}
 		}
-
-
+		catch (const std::exception&)
+		{
+			OutputDebugStringW(L"[");
+			OutputDebugStringW(A[L"id"].c_str());
+			OutputDebugStringW(L"]:[");
+			OutputDebugStringW(A[L"class"].c_str());
+			OutputDebugStringW(L"]<");
+			OutputDebugStringW(A[L"tag"].c_str());
+			OutputDebugStringW(L">\n");
+			A[L"enable"] = L"disable";
+		}
 	}
-
 }
 void MyApp::Draw(const GameTimer& gt)
 {
@@ -446,19 +592,19 @@ void MyApp::Draw(const GameTimer& gt)
 
 	{
 		int m_frameIndex = mCurrBackBuffer;
-		ID3D11Resource* ppResources[] = { m_wrappedRenderTargets[m_frameIndex].Get() };
+		ID3D11Resource* ppResources[] = { m_d2d->wrappedRenderTargets[m_frameIndex].Get() };
 
-		m_d2dDeviceContext->SetTarget(m_d2dRenderTargets[m_frameIndex].Get());
+		m_d2d->d2dDeviceContext->SetTarget(m_d2d->d2dRenderTargets[m_frameIndex].Get());
 
-		m_d3d11On12Device->AcquireWrappedResources(ppResources, _countof(ppResources));
-		m_d2dDeviceContext->BeginDraw();
-
+		m_d2d->d3d11On12Device->AcquireWrappedResources(ppResources, _countof(ppResources));
+		m_d2d->d2dDeviceContext->BeginDraw();
+		
 		DrawUI();
 
-		m_d2dDeviceContext->EndDraw();
-		m_d3d11On12Device->ReleaseWrappedResources(ppResources, _countof(ppResources));
+		m_d2d->d2dDeviceContext->EndDraw();
+		m_d2d->d3d11On12Device->ReleaseWrappedResources(ppResources, _countof(ppResources));
 
-		m_d3d11DeviceContext->Flush();
+		m_d2d->d3d11DeviceContext->Flush();
 
 	}
 	ThrowIfFailed(mSwapChain->Present(0, 0));
@@ -469,22 +615,132 @@ void MyApp::Draw(const GameTimer& gt)
 	mCommandQueue->Signal(mFence.Get(), mCurrentFence);
 }
 
+void MyApp::Query(const std::wstring& query)
+{
+	if (mQuery.enable)
+	{
+		if (query == L"SAVE\tEND")
+		{
+			mQuery.enable = false;
+			OutputDebugStringW(L"SAVE END\n");
+			return;
+		}
+		
+		
+		mQuery.word.clear();
+
+		for (mQuery.pos = 0; mQuery.pos < query.size(); ++mQuery.pos)
+		{
+			auto ch = query.at(mQuery.pos);
+			
+			if (mQuery.isLineComment)
+			{
+				if (ch == L'\n' || ch == L'\r')
+					mQuery.isLineComment = false;
+			}
+			else if (mQuery.isComment)
+			{
+				if (ch == L'*' && mQuery.pos + 1 < query.size())
+					if (query.at(mQuery.pos + 1) == L'*')
+					{
+						mQuery.isComment = false;
+						++mQuery.pos;
+					}
+			}
+			else if (ch == L'"')
+				mQuery.isString = !mQuery.isString;
+			else if (mQuery.isString)
+				mQuery.word.rbegin()->push_back(ch);
+			else if (ch == L'\t' || ch == L' ' || ch == L'\n' || ch == L'\r')
+				mQuery.word.push_back(L"");
+			else if (ch == L'/' && mQuery.pos + 1 < query.size())
+				if (query.at(mQuery.pos + 1) == L'/')
+				{
+					mQuery.isLineComment = true;
+					++mQuery.pos;
+				}
+				else if (query.at(mQuery.pos + 1) == L'*')
+				{
+					mQuery.isComment = true;
+					++mQuery.pos;
+				}
+				else
+					mQuery.word.rbegin()->push_back(ch);
+			else
+				mQuery.word.rbegin()->push_back(ch);
+		}
+
+		if (mQuery.word.size() > 0)
+		{
+			for (auto O : mQuery.word)
+			{
+				OutputDebugStringW((L"+" + O).c_str());
+			}
+			OutputDebugStringA("\n");
+
+			mQuery.index = L"";
+			if (*mQuery.word.cbegin() == L"PROVINCE")
+			{
+				mQuery.tag_prov_it = prov_stack.end();
+
+				for (auto O : mQuery.word)
+				{
+					if (O.at(0) == L'-')
+						mQuery.index = O;
+					else
+					{
+						if (mQuery.index == L"-id")
+						{
+							mQuery.tag_prov = Long(O);
+							mQuery.tag_prov_it = prov_stack.find(mQuery.tag_prov);
+						}
+						else if (mQuery.index == L"-ruler")
+						{
+							if (mQuery.tag_prov_it != prov_stack.end())
+							{
+								mQuery.tag_prov_it->second.ruler = Long(O);
+							}
+						}
+						else if (mQuery.index == L"-owner")
+						{
+							if (mQuery.tag_prov_it != prov_stack.end())
+							{
+								mQuery.tag_prov_it->second.owner = Long(O);
+							}
+						}
+
+					}
+				}
+			}
+
+		}
+		else
+		{
+			OutputDebugStringA("E");
+		}
+	}
+	else if (query == L"SAVE\tSTART")
+	{
+		mQuery.enable = true;
+		OutputDebugStringW(L"SAVE START\n");
+	}
+}
 void MyApp::GameSave()
 {
 	captions[L"파일 입출력"] = L"보관시작";
-	std::wofstream file("UserData/Nation");
+	std::wofstream file(L"UserData/Nation");
 
 
-	file << L"SAVE\tSTART" << std::endl;
+	file << L"SAVE\tSTART" << L";\n";
 
 	for (const auto& O : prov_stack)
 	{
-		file << L"PROVINCE" << "L\t" << std::to_wstring(O.first) << std::endl;
-		file << L"RULER" << "L\t" << std::to_wstring(O.second.ruler) << std::endl;
-		file << L"OWNER" << "L\t" << std::to_wstring(O.second.owner) << std::endl;
+		file << L"PROVINCE" << L"\t" << L"-id " << std::to_wstring(O.first)
+			<< L" -ruler " << std::to_wstring(O.second.ruler)
+			<< L" -owner " << std::to_wstring(O.second.owner) << L";\n";
 	}
 
-	file << L"SAVE\tEND" << std::endl;
+	file << L"SAVE\tEND" << L";\n";
 
 	file.close();
 	captions[L"파일 입출력"] = L"보관종료";
@@ -492,42 +748,96 @@ void MyApp::GameSave()
 void MyApp::GameLoad()
 {
 	captions[L"파일 입출력"] = L"적재시작";
+	std::wifstream file(L"UserData/Nation");
+
+	if (!file) {
+		log_main << "[GameLoad Failed]";
+		return;
+	}
+
+	file.seekg(0, std::ios::end);
+	size_t length = file.tellg();
+
+	std::vector<wchar_t> buf(length);
+
+	file.seekg(0);
+	file.read(&buf[0], length);
+	file.close();
+	
+	std::wstring wstr;
+	wstr.assign(buf.begin(), buf.end());
+	size_t cursor = 0, next;
+	while (1)
+	{
+ 		next = wstr.find(L';', cursor);
+		if (next == std::wstring::npos)
+		{
+			Query(wstr.substr(cursor));
+			break;
+		}
+		Query(wstr.substr(cursor, next - cursor));
+		cursor = next + 1;
+	}
+	
+
 	captions[L"파일 입출력"] = L"적재종료";
 
 }
 
 void MyApp::GameInit()
 {
-
 	NationId nation_count = 0;
 	{
 		std::unique_ptr<Nation> 신라 = std::make_unique<Nation>();
-		신라->MainColor = XMFLOAT4(0.5f, 0.5f, 0.1f, 1.f);
+		신라->MainColor = XMFLOAT4(0.5f, 0.5f, 0.1f, 0.75f);
 		신라->MainName = L"신라";
 		nations[++nation_count] = std::move(신라);
 
 		std::unique_ptr<Nation> 백제 = std::make_unique<Nation>();
-		백제->MainColor = XMFLOAT4(0.1f, 0.5f, 0.45f, 1.f);
+		백제->MainColor = XMFLOAT4(0.1f, 0.5f, 0.45f, 0.75f);
 		백제->MainName = L"백제";
 		nations[++nation_count] = std::move(백제);
 
 		std::unique_ptr<Nation> 고구려 = std::make_unique<Nation>();
-		고구려->MainColor = XMFLOAT4(0.4f, 0.0f, 0.0f, 1.f);
+		고구려->MainColor = XMFLOAT4(0.4f, 0.0f, 0.0f, 0.75f);
 		고구려->MainName = L"고구려";
 		nations[++nation_count] = std::move(고구려);
 	}
+	wchar_t buf[256];
+	for (const auto& O : prov_stack)
+	{
+		swprintf_s(buf, LR"(<div id="prov%.0lf" enable="disable" opacity="0.5">)", (double)O.first);
+		m_DrawItems.data.push_back(std::make_unique<YTML::DrawItem>(buf));
+		swprintf_s(buf, LR"(<a id="provtext%.0lf" enable="disable" opacity="1.0">)", (double)O.first);
+		m_DrawItems.data.push_back(std::make_unique<YTML::DrawItem>(buf));
+		//captions[buf] = L"";
+	}
 
 
+	m_DrawItems.data.push_back(std::make_unique<YTML::DrawItem>(LR"(<img id="myDiv" left="0" top="0" width="400" height="300">)"));
+	
+	GameLoad();
 }
 void MyApp::GameUpdate()
 {
+	m_DrawItems.withID(L"myDiv",
+		{
+			L"left", Str(mLastMousePos.x),
+			L"top", Str(mLastMousePos.y)
+		}
+	);
+
+
+	XMFLOAT4 rgb;
 	for (const auto& O : prov_stack)
 	{
+		rgb = XMFLOAT4(0.f, 0.f, 0.f, 0.f);
 		mMainPassCB.gSubProv[O.first] = XMFLOAT4(0.f, 0.f, 0.f, 0.f);
 		mMainPassCB.gProv[O.first] = { 0.f,0.f,0.f,0.f };
 		
 		if (const auto& P = nations.find(O.second.owner); P != nations.end())
 		{
+			rgb = P->second->MainColor;
 			mMainPassCB.gProv[O.first] = P->second->MainColor;
 			mMainPassCB.gSubProv[O.first] = P->second->MainColor;
 		}
@@ -535,6 +845,69 @@ void MyApp::GameUpdate()
 		{
 			mMainPassCB.gSubProv[O.first] = P->second->MainColor;
 		}
+
+
+		XMFLOAT3 pos = O.second.on3Dpos;
+		pos.x /= 2.f;
+		pos.y /= 2.f;
+		pos.z /= 2.f;
+		pos.y += 3.f;
+		XMFLOAT3 s = Convert3Dto2D(XMLoadFloat3(&pos));
+
+		float w = mClientHeight / 30.f * O.second.name.length() + 10.f;
+		float h = mClientHeight / 25.f;
+		float size = 25.0f / s.z;
+
+		if (size > 0.f)
+		{
+			w *= size;
+			h *= size;
+
+			YTML::Args args;
+			args[L"ProvinceID"] = Str(O.first);
+			args[L"ProvinceColor.R"] = Str(rgb.x);
+			args[L"ProvinceColor.G"] = Str(rgb.y);
+			args[L"ProvinceColor.B"] = Str(rgb.z);
+			args[L"ProvinceName"] = O.second.name;
+			args[L"Province2D.X"] = Str(s.x);
+			args[L"Province2D.Y"] = Str(s.y);
+			args[L"Province2D.W"] = Str(w);
+			args[L"Province2D.H"] = Str(h);
+			
+			m_DrawItems.withID(L"prov" + args[L"ProvinceID"],
+				{
+					L"color-r", Str(rgb.x / 1.5f),
+					L"color-g", Str(rgb.y / 1.5f),
+					L"color-b", Str(rgb.z / 1.5f),
+					L"enable", L"enable",
+					L"left", args[L"Province2D.X"],
+					L"top", args[L"Province2D.Y"],
+					L"width", args[L"Province2D.W"],
+					L"height",args[L"Province2D.H"],
+					L"border", L"line",
+					L"horizontal-align", L"center",
+					L"vertical-align", L"center"
+				}
+			);
+
+			m_DrawItems.withID(L"provtext" + args[L"ProvinceID"],
+				{
+					L"color-r",  L"1",
+					L"color-g", L"1",
+					L"color-b",  L"1",
+					L"enable", L"enable",
+					L"left", args[L"Province2D.X"],
+					L"top", args[L"Province2D.Y"],
+					L"width", args[L"Province2D.W"],
+					L"height",args[L"Province2D.H"],
+					L"text", args[L"ProvinceName"],
+
+					L"horizontal-align", L"center",
+					L"vertical-align", L"center"
+				}
+			);
+		}
+
 	}
 
 	mMainPassCB.gProv[0] = { 0.f, 0.f, 0.f, 0.f };
@@ -553,20 +926,16 @@ void MyApp::GameUpdate()
 	mEyetarget.m128_f32[2] += mEyeMoveZ;
 	mEyeMoveX -= mEyeMoveX;
 	mEyeMoveZ -= mEyeMoveZ;
-
-	captions[L"Theta"] = std::to_wstring(mTheta);
-	captions[L"Phi"] = std::to_wstring(mPhi);
-	captions[L"Radius"] = std::to_wstring(mRadius);
-
-
-	captions[L"CamPosX"] = std::to_wstring(mEyetarget.m128_f32[0]);
-	captions[L"CamPosY"] = std::to_wstring(mEyetarget.m128_f32[1]);
-	captions[L"CamPosZ"] = std::to_wstring(mEyetarget.m128_f32[2]);	
 }
 
 void MyApp::GameClose()
 {
+	for (auto& O : mBitmap)
+		DeleteObject(O.second);
 	log_main.close();
+	if (m_fullscreenMode)
+		ToggleFullscreenWindow();
+	m_d2d.reset();
 }
 
 void MyApp::ProvinceMousedown(WPARAM btnState, ProvinceId id)
@@ -675,21 +1044,22 @@ void MyApp::LoadSizeDependentResources()
 
 	//m_scene->LoadSizeDependentResources(md3dDevice.Get(), mSwapChainBuffer, mClientWidth, mClientHeight);
 
-	if (true)//m_enableUI)
+	//if (true)//m_enableUI)
 	{
+		if (!mUI_isInitial)
 		{
-			m_wrappedRenderTargets.resize(SwapChainBufferCount);
-			m_d2dRenderTargets.resize(SwapChainBufferCount);
+			BuildImage();
+			UILayerInitialize();
 			//m_textBlocks.resize(1);
-			UILayerInitialize(md3dDevice.Get(), mCommandQueue.Get());
+			mUI_isInitial = true;
 		}
-		UILayerResize(mSwapChainBuffer, mClientWidth, mClientHeight);
+		UILayerResize();
 	}
 }
-void MyApp::UILayerResize(ComPtr<ID3D12Resource>* ppRenderTargets, UINT width, UINT height)
+void MyApp::UILayerResize()
 {
-	//auto m_width = static_cast<float>(width);
-	auto m_height = static_cast<float>(height);
+	//auto m_width = static_cast<float>(mClientWidth);
+	auto m_height = static_cast<float>(mClientHeight);
 
 	// Query the desktop's dpi settings, which will be used to create
 	// D2D's render targets.
@@ -703,27 +1073,27 @@ void MyApp::UILayerResize(ComPtr<ID3D12Resource>* ppRenderTargets, UINT width, U
 	// used it in this state - and the Out resource state as PRESENT. When 
 	// ReleaseWrappedResources() is called on the 11On12 device, the resource 
 	// will be transitioned to the PRESENT state.
-	for (UINT i = 0; i < m_wrappedRenderTargets.size(); i++)
+	for (UINT i = 0; i < m_d2d->wrappedRenderTargets.size(); i++)
 	{
 		D3D11_RESOURCE_FLAGS d3d11Flags = { D3D11_BIND_RENDER_TARGET };
-		ThrowIfFailed(m_d3d11On12Device->CreateWrappedResource(
-			ppRenderTargets[i].Get(),
+		ThrowIfFailed(m_d2d->d3d11On12Device->CreateWrappedResource(
+			mSwapChainBuffer[i].Get(),
 			&d3d11Flags,
 			D3D12_RESOURCE_STATE_RENDER_TARGET,
 			D3D12_RESOURCE_STATE_PRESENT,
-			IID_PPV_ARGS(&m_wrappedRenderTargets[i])));
+			IID_PPV_ARGS(&m_d2d->wrappedRenderTargets[i])));
 
 		// Create a render target for D2D to draw directly to this back buffer.
 		ComPtr<IDXGISurface> surface;
-		ThrowIfFailed(m_wrappedRenderTargets[i].As(&surface));
-		ThrowIfFailed(m_d2dDeviceContext->CreateBitmapFromDxgiSurface(
+		ThrowIfFailed(m_d2d->wrappedRenderTargets[i].As(&surface));
+		ThrowIfFailed(m_d2d->d2dDeviceContext->CreateBitmapFromDxgiSurface(
 			surface.Get(),
 			&bitmapProperties,
-			&m_d2dRenderTargets[i]));
+			&m_d2d->d2dRenderTargets[i]));
 	}
 
-	ThrowIfFailed(m_d2dDevice->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE, &m_d2dDeviceContext));
-	m_d2dDeviceContext->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
+	ThrowIfFailed(m_d2d->d2dDevice->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE, &m_d2d->d2dDeviceContext));
+	m_d2d->d2dDeviceContext->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
 	CreateBrush();
 
 	// Create DWrite text format objects.
@@ -731,21 +1101,21 @@ void MyApp::UILayerResize(ComPtr<ID3D12Resource>* ppRenderTargets, UINT width, U
 	const float smallFontSize = m_height / 40.0f;
 
 
-	ThrowIfFailed(m_dwriteFactory->CreateTextFormat(
+	ThrowIfFailed(m_d2d->dwriteFactory->CreateTextFormat(
 		L"EBSJSK",
-		m_dwFontColl.Get(),
+		m_d2d->dwFontColl.Get(),
 		DWRITE_FONT_WEIGHT_NORMAL,
 		DWRITE_FONT_STYLE_NORMAL,
 		DWRITE_FONT_STRETCH_NORMAL,
 		fontSize,
 		L"",
-		&m_textFormat[L"Above Province"]));
+		&m_d2d->textFormat[L"Above Province"]));
 
-	ThrowIfFailed(m_textFormat[L"Above Province"]->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER));
-	ThrowIfFailed(m_textFormat[L"Above Province"]->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_NEAR));
+	ThrowIfFailed(m_d2d->textFormat[L"Above Province"]->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER));
+	ThrowIfFailed(m_d2d->textFormat[L"Above Province"]->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_NEAR));
 
 
-	ThrowIfFailed(m_dwriteFactory->CreateTextFormat(
+	ThrowIfFailed(m_d2d->dwriteFactory->CreateTextFormat(
 		L"Consolas",
 		nullptr,
 		DWRITE_FONT_WEIGHT_NORMAL,
@@ -753,13 +1123,13 @@ void MyApp::UILayerResize(ComPtr<ID3D12Resource>* ppRenderTargets, UINT width, U
 		DWRITE_FONT_STRETCH_NORMAL,
 		fontSize,
 		L"",
-		&m_textFormat[L"Debug"]));
+		&m_d2d->textFormat[L"Debug"]));
 
-	ThrowIfFailed(m_textFormat[L"Debug"]->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER));
-	ThrowIfFailed(m_textFormat[L"Debug"]->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_NEAR));
+	ThrowIfFailed(m_d2d->textFormat[L"Debug"]->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER));
+	ThrowIfFailed(m_d2d->textFormat[L"Debug"]->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_NEAR));
 
 }
-void MyApp::UILayerInitialize(ID3D12Device* pDevice, ID3D12CommandQueue* pCommandQueue)
+void MyApp::UILayerInitialize()
 {
 	UINT d3d11DeviceFlags = D3D11_CREATE_DEVICE_BGRA_SUPPORT;
 	D2D1_FACTORY_OPTIONS d2dFactoryOptions = {};
@@ -775,9 +1145,9 @@ void MyApp::UILayerInitialize(ID3D12Device* pDevice, ID3D12CommandQueue* pComman
 	// Create an 11 device wrapped around the 12 device and share
 	// 12's command queue.
 	ComPtr<ID3D11Device> d3d11Device;
-	ID3D12CommandQueue* ppCommandQueues[] = { pCommandQueue };
+	ID3D12CommandQueue* ppCommandQueues[] = { mCommandQueue.Get() };
 	ThrowIfFailed(D3D11On12CreateDevice(
-		pDevice,
+		md3dDevice.Get(),
 		d3d11DeviceFlags,
 		nullptr,
 		0,
@@ -785,17 +1155,17 @@ void MyApp::UILayerInitialize(ID3D12Device* pDevice, ID3D12CommandQueue* pComman
 		_countof(ppCommandQueues),
 		0,
 		&d3d11Device,
-		&m_d3d11DeviceContext,
+		&m_d2d->d3d11DeviceContext,
 		nullptr
 	));
 
 	// Query the 11On12 device from the 11 device.
-	ThrowIfFailed(d3d11Device.As(&m_d3d11On12Device));
+	ThrowIfFailed(d3d11Device.As(&m_d2d->d3d11On12Device));
 
 #if defined(_DEBUG) || defined(DBG)
 	// Filter a debug error coming from the 11on12 layer.
 	ComPtr<ID3D12InfoQueue> infoQueue;
-	if (SUCCEEDED(pDevice->QueryInterface(IID_PPV_ARGS(&infoQueue))))
+	if (SUCCEEDED(md3dDevice.Get()->QueryInterface(IID_PPV_ARGS(&infoQueue))))
 	{
 		// Suppress messages based on their severity level.
 		D3D12_MESSAGE_SEVERITY severities[] =
@@ -824,17 +1194,20 @@ void MyApp::UILayerInitialize(ID3D12Device* pDevice, ID3D12CommandQueue* pComman
 	// Create D2D/DWrite components.
 	{
 		ComPtr<IDXGIDevice> dxgiDevice;
-		ThrowIfFailed(m_d3d11On12Device.As(&dxgiDevice));
+		ThrowIfFailed(m_d2d->d3d11On12Device.As(&dxgiDevice));
 
-		ThrowIfFailed(D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, __uuidof(ID2D1Factory3), &d2dFactoryOptions, &m_d2dFactory));
-		ThrowIfFailed(m_d2dFactory->CreateDevice(dxgiDevice.Get(), &m_d2dDevice));
-		ThrowIfFailed(m_d2dDevice->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE, &m_d2dDeviceContext));
+		ThrowIfFailed(D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, __uuidof(ID2D1Factory3), &d2dFactoryOptions, &m_d2d->d2dFactory));
+		ThrowIfFailed(m_d2d->d2dFactory->CreateDevice(dxgiDevice.Get(), &m_d2d->d2dDevice));
+		ThrowIfFailed(m_d2d->d2dDevice->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE, &m_d2d->d2dDeviceContext));
 
-		m_d2dDeviceContext->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
+		m_d2d->d2dDeviceContext->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
 
 		CreateBrush();
 
-		ThrowIfFailed(DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory), &m_dwriteFactory));
+		ThrowIfFailed(m_d2d->d2dDeviceContext->CreateSolidColorBrush(
+			D2D1::ColorF(D2D1::ColorF::Black), &m_d2d->Brush[L"Temp"]));
+
+		ThrowIfFailed(DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory), &m_d2d->dwriteFactory));
 	}
 	
 	ComPtr<IDWriteFontFile> tFontFile = nullptr;
@@ -842,14 +1215,15 @@ void MyApp::UILayerInitialize(ID3D12Device* pDevice, ID3D12CommandQueue* pComman
 	ComPtr<IDWriteFontCollectionLoader> fontCollLoader = nullptr;
 
 	ThrowIfFailed(AddFontResourceW(L"Resource\\Fonts\\Ruzicka TypeK.ttf"));
-	ThrowIfFailed(m_dwriteFactory->GetSystemFontCollection(m_dwFontColl.GetAddressOf(), false))
+	ThrowIfFailed(m_d2d->dwriteFactory->GetSystemFontCollection(m_d2d->dwFontColl.GetAddressOf(), false))
 
-	//for (UINT32 i = 0U; i < m_dwFontColl->GetFontFamilyCount(); ++i)
+	ThrowIfFailed(m_d2d->d2dDeviceContext->CreateBitmapFromWicBitmap(m_d2d->pConvertedSourceBitmap.Get(), nullptr, m_d2d->pD2DBitmap.GetAddressOf()));
+	//for (UINT32 i = 0U; i < m_d2d->dwFontColl->GetFontFamilyCount(); ++i)
 	//{
 	//	//OutputDebugStringW(std::to_wstring(i).c_str());
 	//	//OutputDebugStringW(L" : try\n");
 	//	IDWriteFontFamily* ff = nullptr;
-	//	m_dwFontColl->GetFontFamily(i, &ff);
+	//	m_d2d->dwFontColl->GetFontFamily(i, &ff);
 
 	//	IDWriteLocalizedStrings* pFamilyNames = nullptr;
 
@@ -887,10 +1261,10 @@ void MyApp::UILayerInitialize(ID3D12Device* pDevice, ID3D12CommandQueue* pComman
 
 void MyApp::CreateBrush()
 {
-	ThrowIfFailed(m_d2dDeviceContext->CreateSolidColorBrush(
-		D2D1::ColorF(D2D1::ColorF::White), &m_Brush[L"White"]));
-	ThrowIfFailed(m_d2dDeviceContext->CreateSolidColorBrush(
-		D2D1::ColorF(D2D1::ColorF::Black), &m_Brush[L"Black"]));
+	ThrowIfFailed(m_d2d->d2dDeviceContext->CreateSolidColorBrush(
+		D2D1::ColorF(D2D1::ColorF::White), &m_d2d->Brush[L"White"]));
+	ThrowIfFailed(m_d2d->d2dDeviceContext->CreateSolidColorBrush(
+		D2D1::ColorF(D2D1::ColorF::Black), &m_d2d->Brush[L"Black"]));
 }
 
 void MyApp::OnMouseDown(WPARAM btnState, int x, int y)
@@ -898,7 +1272,6 @@ void MyApp::OnMouseDown(WPARAM btnState, int x, int y)
     mLastMousePos.x = x;
     mLastMousePos.y = y;
 
-	//if (btnState & MK_LBUTTON)
 	{
 		Pick(btnState, x, y);
 	}
@@ -1338,30 +1711,6 @@ void MyApp::BuildShadersAndInputLayout()
 	};
 }
 
-template<typename T>
-Color32 rgb2dex(const T& r, const T& g, const T& b)
-{
-	return ((r * 256) + g) * 256 + b;
-}
-
-void dex2rgb(float& r, float& g, float& b, const Color32& dex)
-{
-	r = ((dex & 16711680) / 65536) / 255.f;
-	g = ((dex & 65208) / 256) / 255.f;
-	b = (dex & 255) / 255.f;
-}
-void dex2rgb(unsigned char& r, unsigned char& g, unsigned char& b, const Color32& dex)
-{
-	r = static_cast<unsigned char>((dex & 16711680) / 65536);
-	g = static_cast<unsigned char>((dex & 65208) / 256);
-	b = static_cast<unsigned char>((dex & 255));
-}
-void dex2rgb(unsigned int& r, unsigned int& g, unsigned int& b, const Color32& dex)
-{
-	r = (dex & 16711680) / 65536;
-	g = (dex & 65208) / 256;
-	b = (dex & 255);
-}
 
 void MyApp::BuildLandGeometry()
 {
@@ -1440,7 +1789,7 @@ void MyApp::BuildLandGeometry()
 		float R0, G0, B0, R1, G1, B1, syc;
 		size_t addr;
 		Color32 dex;
-		mWaves = std::make_unique<Waves>(map_h, map_w, 1.0f, 0.03f, 4.0f, 0.2f);
+		mWaves = std::make_unique<Waves>(map_h / 3, map_w / 3, 3.0f, 0.03f, 4.0f, 0.2f);
 		for (size_t y = h - 1;; --y) {
 			for (size_t x = 0; x < w; ++x) {
 				//OutputDebugStringA((std::to_string(x) + ", " + std::to_string(y) + "\n").c_str());
@@ -1455,7 +1804,7 @@ void MyApp::BuildLandGeometry()
 					mLandVertices[x + y * w].Pos.y += powf(MathHelper::RandF(), 6) / 3.f;
 				}
 
-				mWaves->mPrevSolution[x + (h - 1 - y) * w].earth = mLandVertices[x + y * w].Pos.y;
+				//mWaves->mPrevSolution[x + (h - 1 - y) * w].earth = mLandVertices[x + y * w].Pos.y;
 
 				mLandVertices[x + y * w].TexC = { 1.f / (w - 1) * x, 1.f / (h - 1) * y};
 				mLandVertices[x + y * w].Prov = 0;
@@ -2002,26 +2351,6 @@ void MyApp::BuildRenderItems()
 		mAllRitems.push_back(std::move(newboxRitem_u));
 	}
 
-	for (const auto& O : prov_stack)
-	{
-		auto newboxRitem = boxRitem;
-		auto newboxRitem_u = std::make_unique<RenderItem>(newboxRitem);
-
-		newboxRitem_u->ObjCBIndex = all_CBIndex++;
-
-		XMStoreFloat4x4(&newboxRitem_u->World,
-			XMMatrixTranslation(
-				O.second.on3Dpos.x,
-				O.second.on3Dpos.y,
-				O.second.on3Dpos.z
-			)
-			+
-			XMMatrixScaling(5.0f, 5.0f, 5.0f)
-		);
-
-		mRitemLayer[(int)RenderLayer::Opaque].push_back(newboxRitem_u.get());
-		mAllRitems.push_back(std::move(newboxRitem_u));
-	}
 
     mAllRitems.push_back(std::move(wavesRitem));
     mAllRitems.push_back(std::move(gridRitem));

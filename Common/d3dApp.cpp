@@ -145,6 +145,7 @@ void D3DApp::CreateRtvAndDsvDescriptorHeaps()
 
 void D3DApp::OnResize()
 {
+	
 	assert(md3dDevice);
 	assert(mSwapChain);
     assert(mDirectCmdListAlloc);
@@ -152,53 +153,20 @@ void D3DApp::OnResize()
 	// Flush before changing any resources.
 	FlushCommandQueue();
 
+
     ThrowIfFailed(mCommandList->Reset(mDirectCmdListAlloc.Get(), nullptr));
+
+
 
 	for (int i = 0; i < SwapChainBufferCount; ++i)
 	{
 		mSwapChainBuffer[i].Reset();
-		//mFrameResources[i]->ReleaseSizeDependentResources();
+		//mFrameResources[i].ReleaseSizeDependentResources();
 	}
-	if (!uiFirst)
-	{
-		for (UINT i = 0; i < m_wrappedRenderTargets.size(); i++)
-		{
-			ID3D11Resource* ppResources[] = { m_wrappedRenderTargets[i].Get() };
-			if (m_d3d11On12Device != nullptr)
-				m_d3d11On12Device->ReleaseWrappedResources(ppResources, _countof(ppResources));
-		}
-		if (m_d2dDeviceContext != nullptr)
-			m_d2dDeviceContext->SetTarget(nullptr);
-		if (m_d3d11DeviceContext != nullptr)
-			m_d3d11DeviceContext->Flush();
-		for (UINT i = 0; i < m_wrappedRenderTargets.size(); i++)
-		{
-			m_d2dRenderTargets[i].Reset();
-			m_wrappedRenderTargets[i].Reset();
-		}
 
-		for (auto& O : m_Brush)
-		{
-			O.second.Reset();
-			m_Brush.erase(O.first);
-		}
-
-		for (auto& O : m_textFormat)
-		{
-			O.second.Reset();
-			m_textFormat.erase(O.first);
-		}
-
-		m_dwFontColl.Reset();
-
-		m_d2dDeviceContext.Reset();
-		m_dwriteFactory.Reset();
-		m_d2dDevice.Reset();
-		m_d2dFactory.Reset();
-		m_d3d11DeviceContext.Reset();
-		m_d3d11On12Device.Reset();
-	}
-	uiFirst = false;
+	//Reset UI Layer
+	m_d2d.reset();
+	m_d2d = std::make_unique<UI>(UI(SwapChainBufferCount));
     mDepthStencilBuffer.Reset();
 
 	// Resize the swap chain.
@@ -281,6 +249,9 @@ LRESULT D3DApp::MsgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
 	switch( msg )
 	{
+	case WM_SETCURSOR:
+		//SetCursor(NULL);
+		return 0;
 	// WM_ACTIVATE is sent when the window is activated or deactivated.  
 	// We pause the game when the window is deactivated and unpause it 
 	// when it becomes active.  
@@ -575,10 +546,8 @@ bool D3DApp::InitDirect3D()
 
     m4xMsaaQuality = msQualityLevels.NumQualityLevels;
 	assert(m4xMsaaQuality > 0 && "Unexpected MSAA quality level.");
-	
-#ifdef _DEBUG
-    LogAdapters();
-#endif
+
+	LogAdapters();
 
 	CreateCommandObjects();
     CreateSwapChain();
@@ -815,10 +784,9 @@ void D3DApp::ToggleFullscreenWindow()
 		ThrowIfFailed(pOutput->GetDesc(&Desc));
 		
 		ShowWindow(m_hwnd, SW_NORMAL);
-		mBeforeFullscreenClientWidth = mClientWidth;
-		mBeforeFullscreenClientHeight = mClientHeight;
-		mClientWidth = m_windowRect.right - m_windowRect.left;
-		mClientHeight = m_windowRect.bottom - m_windowRect.top;
+
+		mClientWidth = mBeforeFullscreenClientWidth;
+		mClientHeight = mBeforeFullscreenClientHeight;
 	}
 	else
 	{
@@ -847,8 +815,20 @@ void D3DApp::ToggleFullscreenWindow()
 
 		ShowWindow(m_hwnd, SW_MAXIMIZE);
 		
-		mClientWidth = mBeforeFullscreenClientWidth;
-		mClientHeight = mBeforeFullscreenClientHeight;
+		mBeforeFullscreenClientWidth = mClientWidth;
+		mBeforeFullscreenClientHeight = mClientHeight;
+
+		mClientWidth = 0;
+		mClientHeight = 0;
+
+		for (auto O : m_modeList)
+		{
+			if (O.Width * O.Height > mClientWidth * mClientHeight)
+			{
+				mClientWidth = O.Width;
+				mClientHeight = O.Height;
+			}
+		}
 	}
 	OnResize();
 	m_fullscreenMode = !m_fullscreenMode;

@@ -257,6 +257,34 @@ struct Texture
 	Microsoft::WRL::ComPtr<ID3D12Resource> UploadHeap = nullptr;
 };
 
+
+struct UI
+{
+	Microsoft::WRL::ComPtr<ID3D11DeviceContext> d3d11DeviceContext;
+	Microsoft::WRL::ComPtr<ID3D11On12Device> d3d11On12Device;
+	Microsoft::WRL::ComPtr<IDWriteFactory> dwriteFactory;
+	Microsoft::WRL::ComPtr<ID2D1Factory3> d2dFactory;
+	Microsoft::WRL::ComPtr<ID2D1Device2> d2dDevice;
+	Microsoft::WRL::ComPtr<ID2D1DeviceContext2> d2dDeviceContext;
+	std::vector<Microsoft::WRL::ComPtr<ID3D11Resource>> wrappedRenderTargets;
+	std::vector<Microsoft::WRL::ComPtr<ID2D1Bitmap1>> d2dRenderTargets;
+	Microsoft::WRL::ComPtr<ID2D1Bitmap> pD2DBitmap = nullptr;
+	Microsoft::WRL::ComPtr<IWICFormatConverter> pConvertedSourceBitmap = nullptr;
+	Microsoft::WRL::ComPtr<IWICImagingFactory> pIWICFactory = nullptr;
+
+	Microsoft::WRL::ComPtr<IDWriteFontCollection> dwFontColl;
+	std::unordered_map<std::wstring, Microsoft::WRL::ComPtr<ID2D1SolidColorBrush>> Brush;
+	std::unordered_map<std::wstring, Microsoft::WRL::ComPtr<IDWriteTextFormat>> textFormat;
+
+	Microsoft::WRL::ComPtr<IDWriteTextLayout> textLayout;
+
+	UI(UINT frameCount)
+	{
+		wrappedRenderTargets.resize(frameCount);
+		d2dRenderTargets.resize(frameCount);
+	}
+};
+
 #ifndef ThrowIfFailed
 #define ThrowIfFailed(x)                                              \
 {                                                                     \
