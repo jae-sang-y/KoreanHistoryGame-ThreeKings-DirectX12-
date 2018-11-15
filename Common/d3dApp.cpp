@@ -250,7 +250,7 @@ LRESULT D3DApp::MsgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 	switch( msg )
 	{
 	case WM_SETCURSOR:
-		//SetCursor(NULL);
+		SetCursor(NULL);
 		return 0;
 	// WM_ACTIVATE is sent when the window is activated or deactivated.  
 	// We pause the game when the window is deactivated and unpause it 

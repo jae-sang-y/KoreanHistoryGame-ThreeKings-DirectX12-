@@ -197,6 +197,7 @@
     <ClInclude Include="FrameResource.h" />
     <ClInclude Include="stdafx.h" />
     <ClInclude Include="Waves.h" />
+    <ClInclude Include="Yscript.h" />
     <ClInclude Include="YTML.h" />
   </ItemGroup>
   <ItemGroup>

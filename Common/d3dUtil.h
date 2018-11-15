@@ -257,6 +257,12 @@ struct Texture
 	Microsoft::WRL::ComPtr<ID3D12Resource> UploadHeap = nullptr;
 };
 
+struct WrappedBitmap
+{
+	Microsoft::WRL::ComPtr<ID2D1Bitmap> data;
+	UINT width;
+	UINT height;
+};
 
 struct UI
 {
@@ -268,14 +274,15 @@ struct UI
 	Microsoft::WRL::ComPtr<ID2D1DeviceContext2> d2dDeviceContext;
 	std::vector<Microsoft::WRL::ComPtr<ID3D11Resource>> wrappedRenderTargets;
 	std::vector<Microsoft::WRL::ComPtr<ID2D1Bitmap1>> d2dRenderTargets;
-	Microsoft::WRL::ComPtr<ID2D1Bitmap> pD2DBitmap = nullptr;
+	std::unordered_map <std::wstring, WrappedBitmap> pD2DBitmap;
 	Microsoft::WRL::ComPtr<IWICFormatConverter> pConvertedSourceBitmap = nullptr;
 	Microsoft::WRL::ComPtr<IWICImagingFactory> pIWICFactory = nullptr;
 
 	Microsoft::WRL::ComPtr<IDWriteFontCollection> dwFontColl;
 	std::unordered_map<std::wstring, Microsoft::WRL::ComPtr<ID2D1SolidColorBrush>> Brush;
-	std::unordered_map<std::wstring, Microsoft::WRL::ComPtr<IDWriteTextFormat>> textFormat;
+	Microsoft::WRL::ComPtr<ID2D1BitmapBrush> BitmapBrush;
 
+	std::unordered_map<std::wstring, Microsoft::WRL::ComPtr<IDWriteTextFormat>> textFormat;
 	Microsoft::WRL::ComPtr<IDWriteTextLayout> textLayout;
 
 	UI(UINT frameCount)

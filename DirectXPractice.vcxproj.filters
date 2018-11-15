@@ -83,6 +83,9 @@
     <ClInclude Include="YTML.h">
       <Filter>App</Filter>
     </ClInclude>
+    <ClInclude Include="Yscript.h">
+      <Filter>App</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="Common">

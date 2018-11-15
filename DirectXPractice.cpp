@@ -8,6 +8,7 @@
 #include "Common/GeometryGenerator.h"
 #include "Waves.h"
 #include "YTML.h"
+#include "Yscript.h"
 
 using Microsoft::WRL::ComPtr;
 using namespace DirectX;
@@ -28,10 +29,10 @@ struct RenderItem
 
 	BoundingBox Bounds;
 
-    // World matrix of the shape that describes the object's local space
-    // relative to the world space, which defines the position, orientation,
-    // and scale of the object in the world.
-    XMFLOAT4X4 World = MathHelper::Identity4x4();
+	// World matrix of the shape that describes the object's local space
+	// relative to the world space, which defines the position, orientation,
+	// and scale of the object in the world.
+	XMFLOAT4X4 World = MathHelper::Identity4x4();
 
 	XMFLOAT4X4 TexTransform = MathHelper::Identity4x4();
 
@@ -47,13 +48,13 @@ struct RenderItem
 	Material* Mat = nullptr;
 	MeshGeometry* Geo = nullptr;
 
-    // Primitive topology.
-    D3D12_PRIMITIVE_TOPOLOGY PrimitiveType = D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+	// Primitive topology.
+	D3D12_PRIMITIVE_TOPOLOGY PrimitiveType = D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
 
-    // DrawIndexedInstanced parameters.
-    UINT IndexCount = 0;
-    UINT StartIndexLocation = 0;
-    int BaseVertexLocation = 0;
+	// DrawIndexedInstanced parameters.
+	UINT IndexCount = 0;
+	UINT StartIndexLocation = 0;
+	int BaseVertexLocation = 0;
 	std::string Name = "None";
 };
 
@@ -93,51 +94,51 @@ void dex2rgb(unsigned int& r, unsigned int& g, unsigned int& b, const Color32& d
 class MyApp : public D3DApp
 {
 public:
-    MyApp(HINSTANCE hInstance);
-    MyApp(const MyApp& rhs) = delete;
-    MyApp& operator=(const MyApp& rhs) = delete;
-    ~MyApp();
+	MyApp(HINSTANCE hInstance);
+	MyApp(const MyApp& rhs) = delete;
+	MyApp& operator=(const MyApp& rhs) = delete;
+	~MyApp();
 
-    virtual bool Initialize()override;
+	virtual bool Initialize()override;
 
 private:
-    virtual void OnResize()override;
-    virtual void Update(const GameTimer& gt)override;
-    virtual void Draw(const GameTimer& gt)override;
+	virtual void OnResize()override;
+	virtual void Update(const GameTimer& gt)override;
+	virtual void Draw(const GameTimer& gt)override;
 
 	void DrawUI();
 
 
 	virtual void OnKeyDown(WPARAM btnState)override;
-    virtual void OnMouseDown(WPARAM btnState, int x, int y)override;
-    virtual void OnMouseUp(WPARAM btnState, int x, int y)override;
-    virtual void OnMouseMove(WPARAM btnState, int x, int y)override;
+	virtual void OnMouseDown(WPARAM btnState, int x, int y)override;
+	virtual void OnMouseUp(WPARAM btnState, int x, int y)override;
+	virtual void OnMouseMove(WPARAM btnState, int x, int y)override;
 
-    void OnKeyboardInput(const GameTimer& gt);
+	void OnKeyboardInput(const GameTimer& gt);
 	void UpdateCamera(const GameTimer& gt);
 	void AnimateMaterials(const GameTimer& gt);
 	void UpdateObjectCBs(const GameTimer& gt);
 	void UpdateMaterialCBs(const GameTimer& gt);
 	void UpdateMainPassCB(const GameTimer& gt);
-	void UpdateWaves(const GameTimer& gt); 
+	void UpdateWaves(const GameTimer& gt);
 
 	void LoadTextures();
-    void BuildRootSignature();
+	void BuildRootSignature();
 	void BuildDescriptorHeaps();
-    void BuildShadersAndInputLayout();
-    void BuildLandGeometry();
-    void BuildWavesGeometry();
+	void BuildShadersAndInputLayout();
+	void BuildLandGeometry();
+	void BuildWavesGeometry();
 	void BuildBoxGeometry();
-    void BuildPSOs();
-    void BuildFrameResources();
-    void BuildMaterials();
-    void BuildRenderItems();
+	void BuildPSOs();
+	void BuildFrameResources();
+	void BuildMaterials();
+	void BuildRenderItems();
 	void BuildImage();
-    void DrawRenderItems(ID3D12GraphicsCommandList* cmdList, const std::vector<RenderItem*>& ritems);
+	void DrawRenderItems(ID3D12GraphicsCommandList* cmdList, const std::vector<RenderItem*>& ritems);
 	void Pick(WPARAM btnState, int sx, int sy);
 	void LoadSizeDependentResources();
 	std::array<const CD3DX12_STATIC_SAMPLER_DESC, 6> GetStaticSamplers();
-	const XMFLOAT3& MyApp::Convert3Dto2D(XMVECTOR pos);
+	const XMFLOAT3 MyApp::Convert3Dto2D(XMVECTOR pos);
 	void UILayerInitialize();
 	void UILayerResize();
 	void GameInit();
@@ -150,12 +151,13 @@ private:
 	void CreateBrush();
 
 	void Query(const std::wstring& query);
+	void Execute(const std::wstring& func_name, const std::uint64_t& uuid);
 
 private:
 
-    UINT mCbvSrvDescriptorSize = 0;
+	UINT mCbvSrvDescriptorSize = 0;
 
-    ComPtr<ID3D12RootSignature> mRootSignature = nullptr;
+	ComPtr<ID3D12RootSignature> mRootSignature = nullptr;
 
 	ComPtr<ID3D12DescriptorHeap> mSrvDescriptorHeap = nullptr;
 
@@ -167,10 +169,10 @@ private:
 	std::unordered_map<std::string, ComPtr<ID3DBlob>> mShaders;
 	std::unordered_map<std::string, ComPtr<ID3D12PipelineState>> mPSOs;
 
-    std::vector<D3D12_INPUT_ELEMENT_DESC> mInputLayout;
+	std::vector<D3D12_INPUT_ELEMENT_DESC> mInputLayout;
 	std::vector<D3D12_INPUT_ELEMENT_DESC> mInputLayout_prv;
- 
-    RenderItem* mWavesRitem = nullptr;
+
+	RenderItem* mWavesRitem = nullptr;
 
 	// List of all the render items.
 	std::vector<std::unique_ptr<RenderItem>> mAllRitems;
@@ -181,22 +183,22 @@ private:
 
 	std::unique_ptr<Waves> mWaves;
 
-    PassConstants mMainPassCB;
+	PassConstants mMainPassCB;
 
 	XMFLOAT3 mEyePos = { 0.0f, 0.0f, 0.0f };
 	XMFLOAT4X4 mView = MathHelper::Identity4x4();
 	XMFLOAT4X4 mProj = MathHelper::Identity4x4();
 
-    float mTheta = 1.5f*XM_PI;
-    float mPhi = XM_PIDIV2 - 0.1f;
-    float mRadius = 50.0f;
+	float mTheta = 1.5f*XM_PI;
+	float mPhi = XM_PIDIV2 - 0.1f;
+	float mRadius = 50.0f;
 
 	size_t map_w = 0;
 	size_t map_h = 0;
 
 	float mX = 0;
-	
-    POINT mLastMousePos;
+
+	POINT mLastMousePos;
 
 	struct {
 		std::wstring DebugText = L"선택 되지 않음";
@@ -219,15 +221,15 @@ private:
 		Province()
 		{
 		}
-		Province (std::wstring _name, Color32 _color, XMFLOAT3 _pixel):name(_name), color(_color), pixel(_pixel)
-		{		
+		Province(std::wstring _name, Color32 _color, XMFLOAT3 _pixel) :name(_name), color(_color), pixel(_pixel)
+		{
 
 		}
 	};
 	std::map<ProvinceId, Province> prov_stack;
 	using WCHAR3 = WCHAR[3];
 	struct Nation
-	{	
+	{
 		XMFLOAT4 MainColor = { 0.f, 0.f, 0.f, 0.f };
 		std::wstring MainName = L"오류";
 	};
@@ -238,11 +240,12 @@ private:
 	std::unordered_map<std::wstring, std::wstring> captions;
 	std::unordered_map<std::wstring, HBITMAP> mBitmap;
 
-	YTML::DrawItemList m_DrawItems;
+	std::shared_ptr<YTML::DrawItemList> m_DrawItems = std::make_shared<YTML::DrawItemList>();
+	//YScript::YScript m_script;
 
 	float mEyeMoveX = 0.f;
 	float mEyeMoveZ = 0.f;
-	
+
 	bool mUI_isInitial = false;
 
 	struct Query
@@ -261,39 +264,46 @@ private:
 		decltype(prov_stack)::iterator tag_prov_it;
 
 	} mQuery;
+
+	D2D1_POINT_2F point;
+	D2D1_RECT_F rect;
+	D2D1_SIZE_F size;
+	D2D1_SIZE_F scale;
+
+	std::uint64_t focus = 0;
 };
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE prevInstance, PSTR cmdLine, int showCmd)
 {
-    // Enable run-time memory check for debug builds.
+	// Enable run-time memory check for debug builds.
 #if defined(DEBUG) | defined(_DEBUG)
-    _CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
+	_CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
 #endif
 
-    try
-    {
-        MyApp theApp(hInstance);
-        if(!theApp.Initialize())
-            return 0;
+	try
+	{
+		MyApp theApp(hInstance);
+		if (!theApp.Initialize())
+			return 0;
 
-        return theApp.Run();
-    }
-    catch(DxException& e)
-    {
-        MessageBox(nullptr, e.ToString().c_str(), L"HR Failed", MB_OK);
-        return 0;
-    }
+		return theApp.Run();
+	}
+	catch (DxException& e)
+	{
+		MessageBox(nullptr, e.ToString().c_str(), L"HR Failed", MB_OK);
+		return 0;
+	}
 }
 
 MyApp::MyApp(HINSTANCE hInstance)
-    : D3DApp(hInstance)
+	: D3DApp(hInstance)
 {
 }
 
 MyApp::~MyApp()
 {
-    if(md3dDevice != nullptr)
-        FlushCommandQueue();
+	if (md3dDevice != nullptr)
+		FlushCommandQueue();
 }
 
 bool MyApp::Initialize()
@@ -303,128 +313,138 @@ bool MyApp::Initialize()
 	srand((unsigned int)time(nullptr));
 	log_main.open("Log/main.log");
 
-    if(!D3DApp::Initialize())
-        return false;
+	if (!D3DApp::Initialize())
+		return false;
 
-    // Reset the command list to prep for initialization commands.
-    ThrowIfFailed(mCommandList->Reset(mDirectCmdListAlloc.Get(), nullptr));
+	// Reset the command list to prep for initialization commands.
+	ThrowIfFailed(mCommandList->Reset(mDirectCmdListAlloc.Get(), nullptr));
 
-    // Get the increment size of a descriptor in this heap type.  This is hardware specific, 
+	// Get the increment size of a descriptor in this heap type.  This is hardware specific, 
 	// so we have to query this information.
-    mCbvSrvDescriptorSize = md3dDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+	mCbvSrvDescriptorSize = md3dDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 
- 
+
 	LoadTextures();
-    BuildRootSignature();
+	BuildRootSignature();
 	BuildDescriptorHeaps();
-    BuildShadersAndInputLayout();
-    BuildLandGeometry();
-    BuildWavesGeometry();
-	BuildBoxGeometry();	
+	BuildShadersAndInputLayout();
+	BuildLandGeometry();
+	BuildWavesGeometry();
+	BuildBoxGeometry();
 	BuildMaterials();
-    BuildRenderItems();
-    BuildFrameResources();
-    BuildPSOs();
-	
+	BuildRenderItems();
+	BuildFrameResources();
+	BuildPSOs();
 
-    // Execute the initialization commands.
-    ThrowIfFailed(mCommandList->Close());
-    ID3D12CommandList* cmdsLists[] = { mCommandList.Get() };
-    mCommandQueue->ExecuteCommandLists(_countof(cmdsLists), cmdsLists);
 
-    // Wait until initialization is complete.
-    FlushCommandQueue();
-	
+	// Execute the initialization commands.
+	ThrowIfFailed(mCommandList->Close());
+	ID3D12CommandList* cmdsLists[] = { mCommandList.Get() };
+	mCommandQueue->ExecuteCommandLists(_countof(cmdsLists), cmdsLists);
+
+	// Wait until initialization is complete.
+	FlushCommandQueue();
+
 	GameInit();
 
-    return true;
+	return true;
 }
- 
+
 void MyApp::OnResize()
 {
 
 	mUI_isInitial = false;
-    D3DApp::OnResize();
+	D3DApp::OnResize();
 
-    // The window resized, so update the aspect ratio and recompute the projection matrix.
-    XMMATRIX P = XMMatrixPerspectiveFovLH(0.25f*MathHelper::Pi, AspectRatio(), 1.0f, 1000.0f);
-    XMStoreFloat4x4(&mProj, P);
+	// The window resized, so update the aspect ratio and recompute the projection matrix.
+	XMMATRIX P = XMMatrixPerspectiveFovLH(0.25f*MathHelper::Pi, AspectRatio(), 1.0f, 1000.0f);
+	XMStoreFloat4x4(&mProj, P);
 }
 
 void MyApp::BuildImage()
 {
-	ThrowIfFailed(CoCreateInstance(
-		CLSID_WICImagingFactory,
-		nullptr,
-		CLSCTX_INPROC_SERVER,
-		IID_PPV_ARGS(m_d2d->pIWICFactory.GetAddressOf())
-	));
+	auto loadBitmap = [this](std::wstring filename, std::wstring imagename) {
 
-	ComPtr<IWICBitmapDecoder> pDecoder = nullptr;
-	ComPtr<IWICBitmapFrameDecode> pFrame = nullptr;
+		ThrowIfFailed(CoCreateInstance(
+			CLSID_WICImagingFactory,
+			nullptr,
+			CLSCTX_INPROC_SERVER,
+			IID_PPV_ARGS(m_d2d->pIWICFactory.GetAddressOf())
+		));
 
-	ThrowIfFailed(m_d2d->pIWICFactory->CreateDecoderFromFilename(
-		LR"(cursor.png)",                      // Image to be decoded
-		NULL,                            // Do not prefer a particular vendor
-		GENERIC_READ,                    // Desired read access to the file
-		WICDecodeMetadataCacheOnDemand,  // Cache metadata when needed
-		pDecoder.GetAddressOf()                        // Pointer to the decoder
-	));
+		ComPtr<IWICBitmapDecoder> pDecoder = nullptr;
+		ComPtr<IWICBitmapFrameDecode> pFrame = nullptr;
 
-	// Retrieve the first frame of the image from the decoder
+		ThrowIfFailed(m_d2d->pIWICFactory->CreateDecoderFromFilename(
+			filename.c_str(),                      // Image to be decoded
+			NULL,                            // Do not prefer a particular vendor
+			GENERIC_READ,                    // Desired read access to the file
+			WICDecodeMetadataCacheOnDemand,  // Cache metadata when needed
+			pDecoder.GetAddressOf()                        // Pointer to the decoder
+		));
 
-	ThrowIfFailed(pDecoder->GetFrame(0, pFrame.GetAddressOf()));
+		// Retrieve the first frame of the image from the decoder
 
-	m_d2d->pConvertedSourceBitmap.Reset();
-	ThrowIfFailed(m_d2d->pIWICFactory->CreateFormatConverter(m_d2d->pConvertedSourceBitmap.GetAddressOf()));
+		ThrowIfFailed(pDecoder->GetFrame(0, pFrame.GetAddressOf()));
 
-	ThrowIfFailed(m_d2d->pConvertedSourceBitmap->Initialize(
-		pFrame.Get(),                          // Input bitmap to convert
-		GUID_WICPixelFormat32bppPBGRA,   // Destination pixel format
-		WICBitmapDitherTypeNone,         // Specified dither pattern
-		nullptr,                         // Specify a particular palette 
-		0.f,                             // Alpha threshold
-		WICBitmapPaletteTypeCustom       // Palette translation type
-	));
+		pFrame->GetSize(&m_d2d->pD2DBitmap[imagename].width, &m_d2d->pD2DBitmap[imagename].height);
 
+		m_d2d->pConvertedSourceBitmap.Reset();
+		ThrowIfFailed(m_d2d->pIWICFactory->CreateFormatConverter(m_d2d->pConvertedSourceBitmap.GetAddressOf()));
 
+		ThrowIfFailed(m_d2d->pConvertedSourceBitmap->Initialize(
+			pFrame.Get(),                          // Input bitmap to convert
+			GUID_WICPixelFormat32bppPBGRA,   // Destination pixel format
+			WICBitmapDitherTypeNone,         // Specified dither pattern
+			nullptr,                         // Specify a particular palette 
+			0.f,                             // Alpha threshold
+			WICBitmapPaletteTypeCustom       // Palette translation type
+		));
+
+		ThrowIfFailed(m_d2d->d2dDeviceContext->CreateBitmapFromWicBitmap(m_d2d->pConvertedSourceBitmap.Get(), nullptr, m_d2d->pD2DBitmap[imagename].data.GetAddressOf()));
+
+	};
+	loadBitmap(LR"(Images\cursor.png)", L"Cursor");
+	loadBitmap(LR"(Images\form.png)", L"Form");
 }
 
 void MyApp::Update(const GameTimer& gt)
 {
-    OnKeyboardInput(gt);
+	OnKeyboardInput(gt);
 	UpdateCamera(gt);
 
-    // Cycle through the circular frame resource array.
-    mCurrFrameResourceIndex = (mCurrFrameResourceIndex + 1) % gNumFrameResources;
-    mCurrFrameResource = mFrameResources[mCurrFrameResourceIndex].get();
+	// Cycle through the circular frame resource array.
+	mCurrFrameResourceIndex = (mCurrFrameResourceIndex + 1) % gNumFrameResources;
+	mCurrFrameResource = mFrameResources[mCurrFrameResourceIndex].get();
 
-    // Has the GPU finished processing the commands of the current frame resource?
-    // If not, wait until the GPU has completed commands up to this fence point.
-    if(mCurrFrameResource->Fence != 0 && mFence->GetCompletedValue() < mCurrFrameResource->Fence)
-    {
-        HANDLE eventHandle = CreateEventEx(nullptr, false, false, EVENT_ALL_ACCESS);
-        ThrowIfFailed(mFence->SetEventOnCompletion(mCurrFrameResource->Fence, eventHandle));
-        WaitForSingleObject(eventHandle, INFINITE);
-        CloseHandle(eventHandle);
-    }
+	// Has the GPU finished processing the commands of the current frame resource?
+	// If not, wait until the GPU has completed commands up to this fence point.
+	if (mCurrFrameResource->Fence != 0 && mFence->GetCompletedValue() < mCurrFrameResource->Fence)
+	{
+		HANDLE eventHandle = CreateEventEx(nullptr, false, false, EVENT_ALL_ACCESS);
+		ThrowIfFailed(mFence->SetEventOnCompletion(mCurrFrameResource->Fence, eventHandle));
+		WaitForSingleObject(eventHandle, INFINITE);
+		CloseHandle(eventHandle);
+	}
 
 	AnimateMaterials(gt);
 	UpdateObjectCBs(gt);
 	UpdateMaterialCBs(gt);
 	UpdateMainPassCB(gt);
-    UpdateWaves(gt);
+	UpdateWaves(gt);
 	LoadSizeDependentResources();
 	GameUpdate();
 }
 
-const XMFLOAT3& MyApp::Convert3Dto2D(XMVECTOR pos)
+const XMFLOAT3 MyApp::Convert3Dto2D(FXMVECTOR pos)
 {
-	pos = XMVector3Transform(pos, XMLoadFloat4x4(&mView));
-	pos = XMVector3Transform(pos, XMLoadFloat4x4(&mProj));
+	XMVECTOR _pos = XMVector3Transform(pos, XMLoadFloat4x4(&mView));
+	_pos = XMVector3Transform(_pos, XMLoadFloat4x4(&mProj));
 
 	XMFLOAT3 newPos;
-	XMStoreFloat3(&newPos, pos);
+	XMStoreFloat3(&newPos, _pos);
+
+	OutputDebugStringW((Str(newPos.x) + L" : " + Str(newPos.y) + L" : " + Str(newPos.z) + L"\n\n").c_str());
 
 	newPos.x /= newPos.z;
 	newPos.y /= newPos.z;
@@ -439,43 +459,31 @@ void MyApp::DrawUI()
 {
 	auto& g = m_d2d->d2dDeviceContext;
 
-	if (m_d2d->pConvertedSourceBitmap.Get() != nullptr && m_d2d->pD2DBitmap.Get() == nullptr)
-	{
-		ThrowIfFailed(g->CreateBitmapFromWicBitmap(m_d2d->pConvertedSourceBitmap.Get(), nullptr, m_d2d->pD2DBitmap.GetAddressOf()));
-	}
-	if (m_d2d->pD2DBitmap.Get() != nullptr)
-	{
-		g->DrawBitmap(m_d2d->pD2DBitmap.Get(), D2D1::RectF(0.f, 0.f, 400.f, 300.f));
-	}
-	
-
-	g->DrawText(mUser.DebugText.c_str(), (UINT32)mUser.DebugText.length(), 
-		m_d2d->textFormat[L"Debug"].Get(), D2D1::RectF(0.0f, 0.0f, mClientWidth / 3.f, 1.f * mClientHeight),
-		m_d2d->Brush[L"White"].Get());
-	
 	//if (mRadius < 64.f)
 
-	D2D1_POINT_2F point;
-	D2D1_RECT_F rect;
-	D2D1_SIZE_F size;
 
-	for (auto& O : m_DrawItems.data)
+	g->DrawText(mUser.DebugText.c_str(), (UINT32)mUser.DebugText.length(),
+		m_d2d->textFormat[L"Debug"].Get(), D2D1::RectF(0.0f, 0.0f, mClientWidth / 3.f, 1.f * mClientHeight),
+		m_d2d->Brush[L"White"].Get());
+
+	m_DrawItems->Sort();
+	for (auto& O : m_DrawItems->data)
 	{
-		auto& A = O->Attribute;
+		auto& A = O.Attribute;
 		if (A[L"enable"] == L"disable")
 			continue;
 
 		try
 		{
 			m_d2d->Brush[L"Temp"]->SetColor(D2D1::ColorF(Float(A[L"color-r"]), Float(A[L"color-g"]), Float(A[L"color-b"])));
-			m_d2d->Brush[L"Temp"]->SetOpacity(Float(A[L"opacity"]));
-			
+			m_d2d->Brush[L"Temp"]->SetOpacity(1.0f);// Float(A[L"opacity"]));
+
 			point.x = Float(A[L"left"]);
 			point.y = Float(A[L"top"]);
 
 			size.width = Float(A[L"width"]);
 			size.height = Float(A[L"height"]);
-			
+
 			if (A[L"horizontal-align"] == L"center")
 			{
 				rect.left = point.x - size.width / 2.f;
@@ -512,6 +520,7 @@ void MyApp::DrawUI()
 			if (A[L"tag"] == L"div")
 			{
 				g->FillRectangle(rect, m_d2d->Brush[L"Temp"].Get());
+				//OutputDebugStringW(((A[L"left"]) + L" : " + (A[L"top"]) + L"\n").c_str());
 			}
 			else if (A[L"tag"] == L"a")
 			{
@@ -523,14 +532,25 @@ void MyApp::DrawUI()
 					m_d2d->textLayout.GetAddressOf()
 				));
 				m_d2d->textLayout->SetFontSize(size.height, { 0U,  (UINT32)A[L"text"].length() });
-				
+
 				g->DrawTextLayout(D2D1::Point2F(rect.left, rect.top), m_d2d->textLayout.Get(),
 					m_d2d->Brush[L"Temp"].Get(), D2D1_DRAW_TEXT_OPTIONS_CLIP
 				);
 			}
-			else if (A[L"tag"] == L"img") 
+			else if (A[L"tag"] == L"img")
 			{
-				//g->DrawBitmap(,rect, Float(A[L"opacity"]));
+				auto& B = m_d2d->pD2DBitmap[A[L"src"]];
+				m_d2d->BitmapBrush->SetBitmap(B.data.Get());
+
+				scale.width = (rect.right - rect.left) / B.width;
+				scale.height = (rect.bottom - rect.top) / B.height;
+
+				m_d2d->BitmapBrush->SetTransform(
+					D2D1::Matrix3x2F::Translation(rect.left / scale.width, rect.top / scale.height) *
+					D2D1::Matrix3x2F::Scale(scale.width, scale.height)
+				);
+				//g->FillRectangle(rect, m_d2d->Brush[L"White"].Get());
+				g->FillRectangle(rect, m_d2d->BitmapBrush.Get());
 			}
 		}
 		catch (const std::exception&)
@@ -559,6 +579,7 @@ void MyApp::Draw(const GameTimer& gt)
 
 	mCommandList->ResourceBarrier(1, new CD3DX12_RESOURCE_BARRIER(CD3DX12_RESOURCE_BARRIER::Transition(CurrentBackBuffer(),
 		D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET)));
+
 
 	mCommandList->ClearRenderTargetView(CurrentBackBufferView(), (float*)&mMainPassCB.FogColor, 0, nullptr);
 	mCommandList->ClearDepthStencilView(DepthStencilView(), D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 1.0f, 0, 0, nullptr);
@@ -598,7 +619,7 @@ void MyApp::Draw(const GameTimer& gt)
 
 		m_d2d->d3d11On12Device->AcquireWrappedResources(ppResources, _countof(ppResources));
 		m_d2d->d2dDeviceContext->BeginDraw();
-		
+
 		DrawUI();
 
 		m_d2d->d2dDeviceContext->EndDraw();
@@ -625,14 +646,14 @@ void MyApp::Query(const std::wstring& query)
 			OutputDebugStringW(L"SAVE END\n");
 			return;
 		}
-		
-		
+
+
 		mQuery.word.clear();
 
 		for (mQuery.pos = 0; mQuery.pos < query.size(); ++mQuery.pos)
 		{
 			auto ch = query.at(mQuery.pos);
-			
+
 			if (mQuery.isLineComment)
 			{
 				if (ch == L'\n' || ch == L'\r')
@@ -672,12 +693,6 @@ void MyApp::Query(const std::wstring& query)
 
 		if (mQuery.word.size() > 0)
 		{
-			for (auto O : mQuery.word)
-			{
-				OutputDebugStringW((L"+" + O).c_str());
-			}
-			OutputDebugStringA("\n");
-
 			mQuery.index = L"";
 			if (*mQuery.word.cbegin() == L"PROVINCE")
 			{
@@ -763,13 +778,13 @@ void MyApp::GameLoad()
 	file.seekg(0);
 	file.read(&buf[0], length);
 	file.close();
-	
+
 	std::wstring wstr;
 	wstr.assign(buf.begin(), buf.end());
 	size_t cursor = 0, next;
 	while (1)
 	{
- 		next = wstr.find(L';', cursor);
+		next = wstr.find(L';', cursor);
 		if (next == std::wstring::npos)
 		{
 			Query(wstr.substr(cursor));
@@ -778,7 +793,7 @@ void MyApp::GameLoad()
 		Query(wstr.substr(cursor, next - cursor));
 		cursor = next + 1;
 	}
-	
+
 
 	captions[L"파일 입출력"] = L"적재종료";
 
@@ -806,35 +821,91 @@ void MyApp::GameInit()
 	wchar_t buf[256];
 	for (const auto& O : prov_stack)
 	{
-		swprintf_s(buf, LR"(<div id="prov%.0lf" enable="disable" opacity="0.5">)", (double)O.first);
-		m_DrawItems.data.push_back(std::make_unique<YTML::DrawItem>(buf));
-		swprintf_s(buf, LR"(<a id="provtext%.0lf" enable="disable" opacity="1.0">)", (double)O.first);
-		m_DrawItems.data.push_back(std::make_unique<YTML::DrawItem>(buf));
+		if (O.second.p_num)
+		{
+			swprintf_s(buf, LR"(<div id="prov%.0lf" enable="disable" opacity="0.5">)", (double)O.first);
+			m_DrawItems->Insert(buf);
+			swprintf_s(buf, LR"(<a id="provtext%.0lf" enable="disable" opacity="1.0">)", (double)O.first);
+			m_DrawItems->Insert(buf);
+		}
 		//captions[buf] = L"";
 	}
 
 
-	m_DrawItems.data.push_back(std::make_unique<YTML::DrawItem>(LR"(<img id="myDiv" left="0" top="0" width="400" height="300">)"));
-	
+	//m_DrawItems->Insert(LR"(<img class="myForm" src="Form" left="100" top="100" width="200" height="240" mousedown="FormHold" mouseup="FormUnhold">)");
+	//m_DrawItems->Insert(LR"(<img class="myForm" src="Form" left="400" top="100" width="200" height="240" mousedown="FormHold" mouseup="FormUnhold">)");
+	m_DrawItems->Insert(LR"(<img id="myDiv" src="Cursor" z-index="1" left="0" top="0" width="40" height="40" pointer-events="none">)");
+
 	GameLoad();
 }
+
+void MyApp::Execute(const std::wstring& func_name, const std::uint64_t& uuid)
+{
+	auto& O = m_DrawItems->withUUID(uuid);
+
+	if (func_name == L"FormHold")
+	{
+		O->Attribute[L"hold"] = L"1";
+		O->Attribute[L"FirstMousePos.x"] = Str(mLastMousePos.x);
+		O->Attribute[L"FirstMousePos.y"] = Str(mLastMousePos.y);
+		O->Attribute[L"z-index"] = L"0.5";
+	}
+	else if (func_name == L"FormUnhold")
+	{
+		O->Attribute[L"hold"] = L"0";
+		O->Attribute[L"z-index"] = L"0";
+	}
+
+	//O->Attribute[L"left"] = Str(Float(O->Attribute[L"left"]) + 5.f);
+
+
+
+}
+
 void MyApp::GameUpdate()
 {
-	m_DrawItems.withID(L"myDiv",
+	m_DrawItems->withID(L"myDiv",
 		{
 			L"left", Str(mLastMousePos.x),
 			L"top", Str(mLastMousePos.y)
 		}
 	);
 
+	{
+		//OutputDebugStringW(Str(m_DrawItems->withClass(L"myForm").size()).c_str());
+		auto List = m_DrawItems->withClass(L"myForm");
+		//OutputDebugStringW(Str(List.size()).c_str());
+		for (auto& O : List)
+		{
+			if (O->Attribute[L"hold"] == L"1")
+			{
+				O->Attribute[L"left"] = Str(Float(O->Attribute[L"left"]) + mLastMousePos.x - Float(O->Attribute[L"FirstMousePos.x"]));
+				O->Attribute[L"top"] = Str(Float(O->Attribute[L"top"]) + mLastMousePos.y - Float(O->Attribute[L"FirstMousePos.y"]));
+				O->Attribute[L"FirstMousePos.x"] = Str(mLastMousePos.x);
+				O->Attribute[L"FirstMousePos.y"] = Str(mLastMousePos.y);
+
+				//O->z_index = 1.f;
+			}
+			else
+			{
+				//O->z_index = 0.f;
+			}
+
+		}
+	}
+
 
 	XMFLOAT4 rgb;
 	for (const auto& O : prov_stack)
 	{
+		if (!O.second.p_num)
+		{
+			continue;
+		}
 		rgb = XMFLOAT4(0.f, 0.f, 0.f, 0.f);
 		mMainPassCB.gSubProv[O.first] = XMFLOAT4(0.f, 0.f, 0.f, 0.f);
 		mMainPassCB.gProv[O.first] = { 0.f,0.f,0.f,0.f };
-		
+
 		if (const auto& P = nations.find(O.second.owner); P != nations.end())
 		{
 			rgb = P->second->MainColor;
@@ -853,57 +924,65 @@ void MyApp::GameUpdate()
 		pos.z /= 2.f;
 		pos.y += 3.f;
 		XMFLOAT3 s = Convert3Dto2D(XMLoadFloat3(&pos));
+//		OutputDebugStringW((Str(pos.x) + L" : " + Str(pos.y) + L" : " + Str(pos.z) + L"\n").c_str());
+//		OutputDebugStringW((Str(s.x) + L" : " + Str(s.y) + L" : " + Str(s.z) + L"\n\n").c_str());
 
 		float w = mClientHeight / 30.f * O.second.name.length() + 10.f;
 		float h = mClientHeight / 25.f;
 		float size = 25.0f / s.z;
 
-		if (size > 0.f)
+		if (s.z > 0.f)
 		{
 			w *= size;
 			h *= size;
-
-			YTML::Args args;
-			args[L"ProvinceID"] = Str(O.first);
-			args[L"ProvinceColor.R"] = Str(rgb.x);
-			args[L"ProvinceColor.G"] = Str(rgb.y);
-			args[L"ProvinceColor.B"] = Str(rgb.z);
-			args[L"ProvinceName"] = O.second.name;
-			args[L"Province2D.X"] = Str(s.x);
-			args[L"Province2D.Y"] = Str(s.y);
-			args[L"Province2D.W"] = Str(w);
-			args[L"Province2D.H"] = Str(h);
-			
-			m_DrawItems.withID(L"prov" + args[L"ProvinceID"],
+			m_DrawItems->withID(L"prov" + Str(O.first),
 				{
 					L"color-r", Str(rgb.x / 1.5f),
 					L"color-g", Str(rgb.y / 1.5f),
 					L"color-b", Str(rgb.z / 1.5f),
 					L"enable", L"enable",
-					L"left", args[L"Province2D.X"],
-					L"top", args[L"Province2D.Y"],
-					L"width", args[L"Province2D.W"],
-					L"height",args[L"Province2D.H"],
+					L"left", Str(s.x),
+					L"top",Str(s.y),
+					L"width", Str(w),
+					L"height",Str(h),
 					L"border", L"line",
 					L"horizontal-align", L"center",
 					L"vertical-align", L"center"
 				}
 			);
 
-			m_DrawItems.withID(L"provtext" + args[L"ProvinceID"],
+			m_DrawItems->withID(L"provtext" + Str(O.first),
 				{
 					L"color-r",  L"1",
 					L"color-g", L"1",
 					L"color-b",  L"1",
 					L"enable", L"enable",
-					L"left", args[L"Province2D.X"],
-					L"top", args[L"Province2D.Y"],
-					L"width", args[L"Province2D.W"],
-					L"height",args[L"Province2D.H"],
-					L"text", args[L"ProvinceName"],
+					L"left", Str(s.x),
+					L"top", Str(s.y),
+					L"width", Str(w),
+					L"height", Str(h),
+					L"text", O.second.name,
 
 					L"horizontal-align", L"center",
 					L"vertical-align", L"center"
+				}
+			);
+		}
+		else
+		{
+			m_DrawItems->withID(L"prov" + Str(O.first),
+				{
+					L"enable", L"disable",
+					L"left", L"0",
+					L"top", L"0"
+				}
+			);
+
+			m_DrawItems->withID(L"provtext" + Str(O.first),
+				{
+					L"enable", L"disable",
+					L"left", L"0",
+					L"top", L"0"
 				}
 			);
 		}
@@ -911,7 +990,7 @@ void MyApp::GameUpdate()
 	}
 
 	mMainPassCB.gProv[0] = { 0.f, 0.f, 0.f, 0.f };
-	mMainPassCB.gSubProv[0] = mMainPassCB.gProv[0];	
+	mMainPassCB.gSubProv[0] = mMainPassCB.gProv[0];
 
 	if (captions.size() > 0)
 	{
@@ -921,6 +1000,8 @@ void MyApp::GameUpdate()
 			mUser.DebugText += O.first + L" : " + O.second + L"\n";
 		}
 	}
+
+
 
 	mEyetarget.m128_f32[0] += mEyeMoveX;
 	mEyetarget.m128_f32[2] += mEyeMoveZ;
@@ -986,6 +1067,7 @@ void MyApp::ProvinceMousedown(WPARAM btnState, ProvinceId id)
 
 		return;
 	}
+
 }
 
 void MyApp::OnKeyDown(WPARAM btnState)
@@ -1048,8 +1130,8 @@ void MyApp::LoadSizeDependentResources()
 	{
 		if (!mUI_isInitial)
 		{
-			BuildImage();
 			UILayerInitialize();
+			BuildImage();
 			//m_textBlocks.resize(1);
 			mUI_isInitial = true;
 		}
@@ -1207,9 +1289,11 @@ void MyApp::UILayerInitialize()
 		ThrowIfFailed(m_d2d->d2dDeviceContext->CreateSolidColorBrush(
 			D2D1::ColorF(D2D1::ColorF::Black), &m_d2d->Brush[L"Temp"]));
 
+		ThrowIfFailed(m_d2d->d2dDeviceContext->CreateBitmapBrush(nullptr, m_d2d->BitmapBrush.GetAddressOf()));
+
 		ThrowIfFailed(DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory), &m_d2d->dwriteFactory));
 	}
-	
+
 	ComPtr<IDWriteFontFile> tFontFile = nullptr;
 	ComPtr<IDWriteFontFileLoader> fontFileLoader = nullptr;
 	ComPtr<IDWriteFontCollectionLoader> fontCollLoader = nullptr;
@@ -1217,45 +1301,44 @@ void MyApp::UILayerInitialize()
 	ThrowIfFailed(AddFontResourceW(L"Resource\\Fonts\\Ruzicka TypeK.ttf"));
 	ThrowIfFailed(m_d2d->dwriteFactory->GetSystemFontCollection(m_d2d->dwFontColl.GetAddressOf(), false))
 
-	ThrowIfFailed(m_d2d->d2dDeviceContext->CreateBitmapFromWicBitmap(m_d2d->pConvertedSourceBitmap.Get(), nullptr, m_d2d->pD2DBitmap.GetAddressOf()));
-	//for (UINT32 i = 0U; i < m_d2d->dwFontColl->GetFontFamilyCount(); ++i)
-	//{
-	//	//OutputDebugStringW(std::to_wstring(i).c_str());
-	//	//OutputDebugStringW(L" : try\n");
-	//	IDWriteFontFamily* ff = nullptr;
-	//	m_d2d->dwFontColl->GetFontFamily(i, &ff);
+		//for (UINT32 i = 0U; i < m_d2d->dwFontColl->GetFontFamilyCount(); ++i)
+		//{
+		//	//OutputDebugStringW(std::to_wstring(i).c_str());
+		//	//OutputDebugStringW(L" : try\n");
+		//	IDWriteFontFamily* ff = nullptr;
+		//	m_d2d->dwFontColl->GetFontFamily(i, &ff);
 
-	//	IDWriteLocalizedStrings* pFamilyNames = nullptr;
+		//	IDWriteLocalizedStrings* pFamilyNames = nullptr;
 
-	//	ff->GetFamilyNames(&pFamilyNames);
+		//	ff->GetFamilyNames(&pFamilyNames);
 
-	//	UINT32 index = 0U;
+		//	UINT32 index = 0U;
 
-	//	wchar_t localeName[LOCALE_NAME_MAX_LENGTH];
-	//	BOOL exists = false;
+		//	wchar_t localeName[LOCALE_NAME_MAX_LENGTH];
+		//	BOOL exists = false;
 
-	//	GetUserDefaultLocaleName(localeName, LOCALE_NAME_MAX_LENGTH);
+		//	GetUserDefaultLocaleName(localeName, LOCALE_NAME_MAX_LENGTH);
 
-	//	pFamilyNames->FindLocaleName(localeName, &index, &exists);
+		//	pFamilyNames->FindLocaleName(localeName, &index, &exists);
 
-	//	if (!exists)
-	//	{
-	//		pFamilyNames->FindLocaleName(L"en-us", &index, &exists);
-	//	}
+		//	if (!exists)
+		//	{
+		//		pFamilyNames->FindLocaleName(L"en-us", &index, &exists);
+		//	}
 
-	//	if (!exists)
-	//		index = 0U;
+		//	if (!exists)
+		//		index = 0U;
 
-	//	UINT32 length = 0U;
+		//	UINT32 length = 0U;
 
-	//	pFamilyNames->GetStringLength(index, &length);
+		//	pFamilyNames->GetStringLength(index, &length);
 
-	//	std::vector<wchar_t> name(length + 1);
-	//	pFamilyNames->GetString(index, name.data(), length + 1U);
+		//	std::vector<wchar_t> name(length + 1);
+		//	pFamilyNames->GetString(index, name.data(), length + 1U);
 
-	//	//OutputDebugStringW(name.data());
-	//	//OutputDebugStringW(L"\n");
-	//}
+		//	//OutputDebugStringW(name.data());
+		//	//OutputDebugStringW(L"\n");
+		//}
 
 }
 
@@ -1269,20 +1352,78 @@ void MyApp::CreateBrush()
 
 void MyApp::OnMouseDown(WPARAM btnState, int x, int y)
 {
-    mLastMousePos.x = x;
-    mLastMousePos.y = y;
+	mLastMousePos.x = x;
+	mLastMousePos.y = y;
+
+	for (auto& O = m_DrawItems->data.rbegin(); O != m_DrawItems->data.rend(); ++O)
+	{
+		auto& A = O->Attribute;
+		if (A[L"enable"] == L"disable" || A[L"pointer-events"] == L"none")
+			continue;
+
+		point.x = Float(A[L"left"]);
+		point.y = Float(A[L"top"]);
+
+		size.width = Float(A[L"width"]);
+		size.height = Float(A[L"height"]);
+
+		if (A[L"horizontal-align"] == L"center")
+		{
+			rect.left = point.x - size.width / 2.f;
+			rect.right = point.x + size.width / 2.f;
+		}
+		else if (A[L"horizontal-align"] == L"right")
+		{
+			rect.left = point.x - size.width;
+			rect.right = point.x;
+		}
+		else
+		{
+			rect.left = point.x;
+			rect.right = point.x + size.width;
+		}
+
+		if (A[L"vertical-align"] == L"center")
+		{
+			rect.top = point.y - size.height / 2.f;
+			rect.bottom = point.y + size.height / 2.f;
+		}
+		else if (A[L"vertical-align"] == L"top")
+		{
+			rect.top = point.y - size.height;
+			rect.bottom = point.y;
+		}
+		else
+		{
+			rect.top = point.y;
+			rect.bottom = point.y + size.height;
+		}
+
+		if (rect.left <= x && rect.right >= x &&
+			rect.top <= y && rect.bottom >= y)
+		{
+			focus = O->uuid;
+
+			Execute(A[L"mousedown"], O->uuid);
+			OutputDebugStringW((O->Attribute[L"id"] + L"\n").c_str());
+
+			SetCapture(mhMainWnd);
+			return;
+		}
+	}
 
 	{
+		focus = 0;
 		Pick(btnState, x, y);
 	}
 
-    SetCapture(mhMainWnd);
+	SetCapture(mhMainWnd);
 
 }
 
 void MyApp::Pick(WPARAM btnState, int sx, int sy)
 {
-	#pragma region Pick
+#pragma region Pick
 
 
 	XMFLOAT4X4 P = mProj;
@@ -1324,11 +1465,11 @@ void MyApp::Pick(WPARAM btnState, int sx, int sy)
 			tmin = MathHelper::Infinity;
 			for (UINT i = 0; i < triCount; ++i)
 			{
-				
+
 				std::uint16_t i0 = indices[i * 3 + 0];
 				std::uint16_t i1 = indices[i * 3 + 1];
 				std::uint16_t i2 = indices[i * 3 + 2];
-				
+
 
 				XMVECTOR v0 = XMLoadFloat3(&vertices[i0].Pos);
 				XMVECTOR v1 = XMLoadFloat3(&vertices[i1].Pos);
@@ -1345,7 +1486,7 @@ void MyApp::Pick(WPARAM btnState, int sx, int sy)
 					}
 				}
 			}
-			#pragma endregion
+#pragma endregion
 		}
 	}
 	if (lastPick != 0)
@@ -1355,50 +1496,109 @@ void MyApp::Pick(WPARAM btnState, int sx, int sy)
 }
 void MyApp::OnMouseUp(WPARAM btnState, int x, int y)
 {
-    ReleaseCapture();
+	for (auto& O = m_DrawItems->data.rbegin(); O != m_DrawItems->data.rend(); ++O)
+	{
+		auto& A = O->Attribute;
+		if (A[L"enable"] == L"disable")
+			continue;
+
+		point.x = Float(A[L"left"]);
+		point.y = Float(A[L"top"]);
+
+		size.width = Float(A[L"width"]);
+		size.height = Float(A[L"height"]);
+
+		if (A[L"horizontal-align"] == L"center")
+		{
+			rect.left = point.x - size.width / 2.f;
+			rect.right = point.x + size.width / 2.f;
+		}
+		else if (A[L"horizontal-align"] == L"right")
+		{
+			rect.left = point.x - size.width;
+			rect.right = point.x;
+		}
+		else
+		{
+			rect.left = point.x;
+			rect.right = point.x + size.width;
+		}
+
+		if (A[L"vertical-align"] == L"center")
+		{
+			rect.top = point.y - size.height / 2.f;
+			rect.bottom = point.y + size.height / 2.f;
+		}
+		else if (A[L"vertical-align"] == L"top")
+		{
+			rect.top = point.y - size.height;
+			rect.bottom = point.y;
+		}
+		else
+		{
+			rect.top = point.y;
+			rect.bottom = point.y + size.height;
+		}
+
+		if (rect.left <= x && rect.right >= x &&
+			rect.top <= y && rect.bottom >= y)
+		{
+			if (A[L"pointer-events"] == L"none")
+			{
+				continue;
+			}
+			Execute(A[L"mouseup"], O->uuid);
+
+			SetCapture(mhMainWnd);
+			return;
+		}
+	}
+
+	ReleaseCapture();
 }
 
 void MyApp::OnMouseMove(WPARAM btnState, int x, int y)
 {
-    if((btnState & MK_LBUTTON) != 0)
-    {
-		//mPhi = MathHelper::Clamp(mPhi, 0.000001f, MathHelper::Pi - 0.1f);
-        // Make each pixel correspond to a quarter of a degree.
-        float dx = XMConvertToRadians(0.25f*static_cast<float>(x - mLastMousePos.x));
-        float dy = XMConvertToRadians(0.25f*static_cast<float>(y - mLastMousePos.y));
 
-        // Update angles based on input to orbit camera around box.
-        mTheta += dx;
-        mPhi += dy;
-
-		if (mRadius * cosf(mPhi) < 10.f)
+	if (focus == 0)
+	{
+		if ((btnState & MK_LBUTTON) != 0)
 		{
-			mPhi = acosf(10.f / mRadius);
+			float dx = XMConvertToRadians(0.25f*static_cast<float>(x - mLastMousePos.x));
+			float dy = XMConvertToRadians(0.25f*static_cast<float>(y - mLastMousePos.y));
+
+			mTheta += dx;
+			mPhi += dy;
+
+			if (mRadius * cosf(mPhi) < 10.f)
+			{
+				mPhi = acosf(10.f / mRadius);
+			}
+			else if (mPhi < 0.000001f)
+			{
+				mPhi = 0.000001f;
+			}
+
+			// Restrict the angle mPhi.
 		}
-		else if (mPhi < 0.000001f)
+		else if ((btnState & MK_RBUTTON) != 0)
 		{
-			mPhi = 0.000001f;
+			// Make each pixel correspond to 0.2 unit in the scene.
+			float dx = 0.2f*static_cast<float>(x - mLastMousePos.x);
+			float dy = 0.2f*static_cast<float>(y - mLastMousePos.y);
+
+			// Update the camera radius based on input.
+			mRadius += dx - dy;
+
+			// Restrict the radius.
+			mRadius = MathHelper::Clamp(mRadius, 10.0f, 240.0f);
 		}
 
-        // Restrict the angle mPhi.
-    }
-    else if((btnState & MK_RBUTTON) != 0)
-    {
-        // Make each pixel correspond to 0.2 unit in the scene.
-        float dx = 0.2f*static_cast<float>(x - mLastMousePos.x);
-        float dy = 0.2f*static_cast<float>(y - mLastMousePos.y);
-
-        // Update the camera radius based on input.
-        mRadius += dx - dy;
-
-        // Restrict the radius.
-        mRadius = MathHelper::Clamp(mRadius, 10.0f, 240.0f);
-    }
-
-    mLastMousePos.x = x;
-    mLastMousePos.y = y;
+	}
+	mLastMousePos.x = x;
+	mLastMousePos.y = y;
 }
- 
+
 void MyApp::OnKeyboardInput(const GameTimer& gt)
 {
 }
@@ -1407,15 +1607,15 @@ void MyApp::OnKeyboardInput(const GameTimer& gt)
 void MyApp::UpdateCamera(const GameTimer& gt)
 {
 	// Convert Spherical to Cartesian coordinates.
-	mEyePos.x = mRadius*sinf(mPhi + 0.0001f)*cosf(mTheta);
-	mEyePos.z = mRadius*sinf(mPhi + 0.0001f)*sinf(mTheta);
-	mEyePos.y = mRadius*cosf(mPhi + 0.0001f) - 5.0f;
-	
+	mEyePos.x = mRadius * sinf(mPhi + 0.0001f)*cosf(mTheta);
+	mEyePos.z = mRadius * sinf(mPhi + 0.0001f)*sinf(mTheta);
+	mEyePos.y = mRadius * cosf(mPhi + 0.0001f) - 5.0f;
+
 	// Build the view matrix.
 	XMVECTOR pos = XMVectorSet(mEyePos.x, mEyePos.y, mEyePos.z, 1.0f) + mEyetarget;
-	
+
 	XMVECTOR up = XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
-	
+
 	XMMATRIX view = XMMatrixLookAtLH(pos, mEyetarget, up);
 	XMStoreFloat4x4(&mView, view);
 }
@@ -1431,10 +1631,10 @@ void MyApp::AnimateMaterials(const GameTimer& gt)
 	tu += 0.1f * gt.DeltaTime();
 	tv += 0.02f * gt.DeltaTime();
 
-	if(tu >= 1.0f)
+	if (tu >= 1.0f)
 		tu -= 1.0f;
 
-	if(tv >= 1.0f)
+	if (tv >= 1.0f)
 		tv -= 1.0f;
 
 	waterMat->MatTransform(3, 0) = tu;
@@ -1448,11 +1648,11 @@ void MyApp::AnimateMaterials(const GameTimer& gt)
 void MyApp::UpdateObjectCBs(const GameTimer& gt)
 {
 	auto currObjectCB = mCurrFrameResource->ObjectCB.get();
-	for(auto& e : mAllRitems)
+	for (auto& e : mAllRitems)
 	{
 		// Only update the cbuffer data if the constants have changed.  
 		// This needs to be tracked per frame resource.
-		if(e->NumFramesDirty > 0)
+		if (e->NumFramesDirty > 0)
 		{
 			XMMATRIX world = XMLoadFloat4x4(&e->World);
 			XMMATRIX texTransform = XMLoadFloat4x4(&e->TexTransform);
@@ -1473,12 +1673,12 @@ void MyApp::UpdateObjectCBs(const GameTimer& gt)
 void MyApp::UpdateMaterialCBs(const GameTimer& gt)
 {
 	auto currMaterialCB = mCurrFrameResource->MaterialCB.get();
-	for(auto& e : mMaterials)
+	for (auto& e : mMaterials)
 	{
 		// Only update the cbuffer data if the constants have changed.  If the cbuffer
 		// data changes, it needs to be updated for each FrameResource.
 		Material* mat = e.second.get();
-		if(mat->NumFramesDirty > 0)
+		if (mat->NumFramesDirty > 0)
 		{
 			XMMATRIX matTransform = XMLoadFloat4x4(&mat->MatTransform);
 
@@ -1520,13 +1720,13 @@ void MyApp::UpdateMainPassCB(const GameTimer& gt)
 	mMainPassCB.FarZ = 1000.0f;
 	mMainPassCB.TotalTime = gt.TotalTime();
 	mMainPassCB.DeltaTime = gt.DeltaTime();
-	mMainPassCB.AmbientLight = {0.f,0.f,0.f,0.f};//{ 0.25f, 0.25f, 0.35f, 1.0f };
+	mMainPassCB.AmbientLight = { 0.f,0.f,0.f,0.f };//{ 0.25f, 0.25f, 0.35f, 1.0f };
 
 	float time = 0.f;// fmodf(mTimer.TotalTime() / 3.f + 0.f, 20.f) - 10.f;
 
 	mMainPassCB.Lights[0].Direction = { time , -0.57735f, 0.57735f };
-	
-	
+
+
 	mMainPassCB.Lights[0].Strength = { MathHelper::Clamp(2.f - powf(time / 4, 2), 0.f, 1.f), MathHelper::Clamp(1.5f - powf(time / 4, 2), 0.f, 1.f), MathHelper::Clamp(1.f - powf(time / 4, 2), 0.f, 1.f) };
 
 	mMainPassCB.Lights[1].Direction = { 0.f, -0.57735f, 0.57735f };
@@ -1543,13 +1743,13 @@ void MyApp::UpdateWaves(const GameTimer& gt)
 	mWaves->Update(gt.TotalTime());
 
 	auto currWavesVB = mCurrFrameResource->WavesVB.get();
-	for(int i = 0; i < mWaves->VertexCount(); ++i)
+	for (int i = 0; i < mWaves->VertexCount(); ++i)
 	{
 		Vertex v;
 
 		v.Pos = mWaves->Position(i);
 		v.Normal = mWaves->Normal(i);
-		
+
 		v.TexC.x = 0.5f + v.Pos.x / mWaves->Width();
 		v.TexC.y = 0.5f - v.Pos.z / mWaves->Depth();
 
@@ -1592,39 +1792,39 @@ void MyApp::BuildRootSignature()
 	CD3DX12_DESCRIPTOR_RANGE texTable;
 	texTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0);
 
-    // Root parameter can be a table, root descriptor or root constants.
-    CD3DX12_ROOT_PARAMETER slotRootParameter[4];
+	// Root parameter can be a table, root descriptor or root constants.
+	CD3DX12_ROOT_PARAMETER slotRootParameter[4];
 
 	// Perfomance TIP: Order from most frequent to least frequent.
 	slotRootParameter[0].InitAsDescriptorTable(1, &texTable, D3D12_SHADER_VISIBILITY_PIXEL);
-    slotRootParameter[1].InitAsConstantBufferView(0);
-    slotRootParameter[2].InitAsConstantBufferView(1);
-    slotRootParameter[3].InitAsConstantBufferView(2);
+	slotRootParameter[1].InitAsConstantBufferView(0);
+	slotRootParameter[2].InitAsConstantBufferView(1);
+	slotRootParameter[3].InitAsConstantBufferView(2);
 
 	auto staticSamplers = GetStaticSamplers();
 
-    // A root signature is an array of root parameters.
+	// A root signature is an array of root parameters.
 	CD3DX12_ROOT_SIGNATURE_DESC rootSigDesc(4, slotRootParameter,
 		(UINT)staticSamplers.size(), staticSamplers.data(),
 		D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
 
-    // create a root signature with a single slot which points to a descriptor range consisting of a single constant buffer
-    ComPtr<ID3DBlob> serializedRootSig = nullptr;
-    ComPtr<ID3DBlob> errorBlob = nullptr;
-    HRESULT hr = D3D12SerializeRootSignature(&rootSigDesc, D3D_ROOT_SIGNATURE_VERSION_1,
-        serializedRootSig.GetAddressOf(), errorBlob.GetAddressOf());
+	// create a root signature with a single slot which points to a descriptor range consisting of a single constant buffer
+	ComPtr<ID3DBlob> serializedRootSig = nullptr;
+	ComPtr<ID3DBlob> errorBlob = nullptr;
+	HRESULT hr = D3D12SerializeRootSignature(&rootSigDesc, D3D_ROOT_SIGNATURE_VERSION_1,
+		serializedRootSig.GetAddressOf(), errorBlob.GetAddressOf());
 
-    if(errorBlob != nullptr)
-    {
-        ::OutputDebugStringA((char*)errorBlob->GetBufferPointer());
-    }
-    ThrowIfFailed(hr);
+	if (errorBlob != nullptr)
+	{
+		::OutputDebugStringA((char*)errorBlob->GetBufferPointer());
+	}
+	ThrowIfFailed(hr);
 
-    ThrowIfFailed(md3dDevice->CreateRootSignature(
+	ThrowIfFailed(md3dDevice->CreateRootSignature(
 		0,
-        serializedRootSig->GetBufferPointer(),
-        serializedRootSig->GetBufferSize(),
-        IID_PPV_ARGS(mRootSignature.GetAddressOf())));
+		serializedRootSig->GetBufferPointer(),
+		serializedRootSig->GetBufferSize(),
+		IID_PPV_ARGS(mRootSignature.GetAddressOf())));
 }
 
 void MyApp::BuildDescriptorHeaps()
@@ -1695,13 +1895,13 @@ void MyApp::BuildShadersAndInputLayout()
 	mShaders["waveVS"] = d3dUtil::CompileShader(L"Shaders\\Default.hlsl", waves_defines, "VS", "vs_5_0");
 	mShaders["opaquePS"] = d3dUtil::CompileShader(L"Shaders\\Default.hlsl", nullptr, "PS", "ps_5_0");
 	mShaders["alphaTestedPS"] = d3dUtil::CompileShader(L"Shaders\\Default.hlsl", alphaTestDefines, "PS", "ps_5_0");
-	
-    mInputLayout =
-    {
-        { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
-        { "NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 12, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+
+	mInputLayout =
+	{
+		{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+		{ "NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 12, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
 		{ "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 24, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
-    };
+	};
 	mInputLayout_prv =
 	{
 		{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
@@ -1720,7 +1920,7 @@ void MyApp::BuildLandGeometry()
 	assert(file && prov_file && prov_list);
 	{
 		std::map<Color32, std::pair<ProvinceId, std::wstring>> prov_key;
-		
+
 		{
 			std::wstring name, index, r, g, b;
 			for (std::wstring line; std::getline(prov_list, line); )
@@ -1756,7 +1956,7 @@ void MyApp::BuildLandGeometry()
 		prov_file.seekg(0, std::ios::beg);
 
 		OutputDebugStringA(("File Length : " + std::to_string(length) + "\n").c_str());
-			
+
 		std::vector<unsigned char> prov_buf(length);
 		std::vector<unsigned char> buf(length);
 		//char* buf = (char*)std::malloc(sizeof (char) * length);
@@ -1783,7 +1983,7 @@ void MyApp::BuildLandGeometry()
 
 		XMVECTOR vMin = XMLoadFloat3(&vMinf3);
 		XMVECTOR vMax = XMLoadFloat3(&vMaxf3);
-		
+
 		Color32 ind;
 		unsigned char r, g, b;
 		float R0, G0, B0, R1, G1, B1, syc;
@@ -1806,23 +2006,23 @@ void MyApp::BuildLandGeometry()
 
 				//mWaves->mPrevSolution[x + (h - 1 - y) * w].earth = mLandVertices[x + y * w].Pos.y;
 
-				mLandVertices[x + y * w].TexC = { 1.f / (w - 1) * x, 1.f / (h - 1) * y};
+				mLandVertices[x + y * w].TexC = { 1.f / (w - 1) * x, 1.f / (h - 1) * y };
 				mLandVertices[x + y * w].Prov = 0;
 
 				XMVECTOR Pos = XMLoadFloat3(&mLandVertices[x + y * w].Pos);
-				
+
 				vMin = XMVectorMin(vMin, Pos);
 				vMax = XMVectorMax(vMax, Pos);
-				 
+
 				dex = rgb2dex(prov_buf.at(addr + 2), prov_buf.at(addr + 1), prov_buf.at(addr));
-				
+
 				//Registed Province Color
 				if (auto search = prov_key.find(dex); search != prov_key.end())
 				{
 					mLandVertices[x + y * w].Prov = search->second.first;
 					if (auto search_stack = prov_stack.find(search->second.first); search_stack == prov_stack.end())
 					{
-						prov_stack.insert(std::make_pair(search->second.first, Province(search->second.second,dex, XMFLOAT3(mLandVertices[x + y * w].Pos.x, mLandVertices[x + y * w].Pos.y, mLandVertices[x + y * w].Pos.z))));
+						prov_stack.insert(std::make_pair(search->second.first, Province(search->second.second, dex, XMFLOAT3(mLandVertices[x + y * w].Pos.x, mLandVertices[x + y * w].Pos.y, mLandVertices[x + y * w].Pos.z))));
 					}
 					else
 					{
@@ -1840,7 +2040,7 @@ void MyApp::BuildLandGeometry()
 						XMUINT3 u3;
 						syc = MathHelper::Infinity;
 						dex2rgb(R0, G0, B0, dex);
-						
+
 						for (const auto& P : prov_key)
 						{
 							dex2rgb(R1, G1, B1, P.first);
@@ -1851,7 +2051,7 @@ void MyApp::BuildLandGeometry()
 								ind = P.first;
 							}
 						}
-						unregisted_color.insert(std::make_pair(dex,std::make_pair(XMUINT3(std::move(u3)),1)));
+						unregisted_color.insert(std::make_pair(dex, std::make_pair(XMUINT3(std::move(u3)), 1)));
 					}
 					else
 					{
@@ -1922,7 +2122,7 @@ void MyApp::BuildLandGeometry()
 
 
 		std::vector<std::uint16_t> indices;
-		
+
 		for (std::uint16_t x = 0; x < w - 2; ++x)
 		{
 			for (std::uint16_t y = 0; y < h - 2; ++y)
@@ -1961,7 +2161,7 @@ void MyApp::BuildLandGeometry()
 		geo->VertexBufferByteSize = vbByteSize;
 		geo->IndexFormat = DXGI_FORMAT_R16_UINT;
 		geo->IndexBufferByteSize = ibByteSize;
-		
+
 		BoundingBox bounds;
 		XMStoreFloat3(&bounds.Center, 0.5f*(vMin + vMax));
 		XMStoreFloat3(&bounds.Extents, 0.5f*(vMax - vMin));
@@ -1980,31 +2180,31 @@ void MyApp::BuildLandGeometry()
 
 void MyApp::BuildWavesGeometry()
 {
-    std::vector<std::uint16_t> indices(3 * mWaves->TriangleCount()); // 3 indices per face
+	std::vector<std::uint16_t> indices(3 * mWaves->TriangleCount()); // 3 indices per face
 	assert(mWaves->VertexCount() < 0x0000ffff);
 
-    // Iterate over each quad.
-    int m = mWaves->RowCount();
-    int n = mWaves->ColumnCount();
-    int k = 0;
-    for(int i = 0; i < m - 1; ++i)
-    {
-        for(int j = 0; j < n - 1; ++j)
-        {
-            indices.at(k) = static_cast<std::uint16_t>(i*n + j);
-            indices.at(k + 1) = static_cast<std::uint16_t>(i*n + j + 1);
-            indices.at(k + 2) = static_cast<std::uint16_t>((i + 1)*n + j);
+	// Iterate over each quad.
+	int m = mWaves->RowCount();
+	int n = mWaves->ColumnCount();
+	int k = 0;
+	for (int i = 0; i < m - 1; ++i)
+	{
+		for (int j = 0; j < n - 1; ++j)
+		{
+			indices.at(k) = static_cast<std::uint16_t>(i*n + j);
+			indices.at(k + 1) = static_cast<std::uint16_t>(i*n + j + 1);
+			indices.at(k + 2) = static_cast<std::uint16_t>((i + 1)*n + j);
 
-            indices.at(k + 3) = static_cast<std::uint16_t>((i + 1)*n + j);
-            indices.at(k + 4) = static_cast<std::uint16_t>(i*n + j + 1);
-            indices.at(k + 5) = static_cast<std::uint16_t>((i + 1)*n + j + 1);
+			indices.at(k + 3) = static_cast<std::uint16_t>((i + 1)*n + j);
+			indices.at(k + 4) = static_cast<std::uint16_t>(i*n + j + 1);
+			indices.at(k + 5) = static_cast<std::uint16_t>((i + 1)*n + j + 1);
 
-            k += 6; // next quad
-        }
-    }
+			k += 6; // next quad
+		}
+	}
 
-	UINT vbByteSize = mWaves->VertexCount()*sizeof(Vertex);
-	UINT ibByteSize = (UINT)indices.size()*sizeof(std::uint16_t);
+	UINT vbByteSize = mWaves->VertexCount() * sizeof(Vertex);
+	UINT ibByteSize = (UINT)indices.size() * sizeof(std::uint16_t);
 
 	auto geo = std::make_unique<MeshGeometry>();
 	geo->Name = "waterGeo";
@@ -2104,21 +2304,21 @@ void MyApp::BuildBoxGeometry()
 
 void MyApp::BuildPSOs()
 {
-    D3D12_GRAPHICS_PIPELINE_STATE_DESC opaquePsoDesc;
-    ZeroMemory(&opaquePsoDesc, sizeof(D3D12_GRAPHICS_PIPELINE_STATE_DESC));
+	D3D12_GRAPHICS_PIPELINE_STATE_DESC opaquePsoDesc;
+	ZeroMemory(&opaquePsoDesc, sizeof(D3D12_GRAPHICS_PIPELINE_STATE_DESC));
 	opaquePsoDesc.InputLayout = { mInputLayout.data(), (UINT)mInputLayout.size() };
 	opaquePsoDesc.pRootSignature = mRootSignature.Get();
-	opaquePsoDesc.VS = 
-	{ 
-		reinterpret_cast<BYTE*>(mShaders["standardVS"]->GetBufferPointer()), 
+	opaquePsoDesc.VS =
+	{
+		reinterpret_cast<BYTE*>(mShaders["standardVS"]->GetBufferPointer()),
 		mShaders["standardVS"]->GetBufferSize()
 	};
-	opaquePsoDesc.PS = 
-	{ 
+	opaquePsoDesc.PS =
+	{
 		reinterpret_cast<BYTE*>(mShaders["opaquePS"]->GetBufferPointer()),
 		mShaders["opaquePS"]->GetBufferSize()
 	};
-	
+
 	auto Raster = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
 	Raster.MultisampleEnable = true;
 	opaquePsoDesc.RasterizerState = Raster;
@@ -2131,7 +2331,7 @@ void MyApp::BuildPSOs()
 	opaquePsoDesc.SampleDesc.Count = m4xMsaaState ? 4 : 1;
 	opaquePsoDesc.SampleDesc.Quality = m4xMsaaState ? (m4xMsaaQuality - 1) : 0;
 	opaquePsoDesc.DSVFormat = mDepthStencilFormat;
-    ThrowIfFailed(md3dDevice->CreateGraphicsPipelineState(&opaquePsoDesc, IID_PPV_ARGS(&mPSOs["opaque"])));
+	ThrowIfFailed(md3dDevice->CreateGraphicsPipelineState(&opaquePsoDesc, IID_PPV_ARGS(&mPSOs["opaque"])));
 
 	//
 	// PSO for transparent objects
@@ -2163,8 +2363,8 @@ void MyApp::BuildPSOs()
 	//
 
 	D3D12_GRAPHICS_PIPELINE_STATE_DESC alphaTestedPsoDesc = opaquePsoDesc;
-	alphaTestedPsoDesc.PS = 
-	{ 
+	alphaTestedPsoDesc.PS =
+	{
 		reinterpret_cast<BYTE*>(mShaders["alphaTestedPS"]->GetBufferPointer()),
 		mShaders["alphaTestedPS"]->GetBufferSize()
 	};
@@ -2194,11 +2394,11 @@ void MyApp::BuildPSOs()
 
 void MyApp::BuildFrameResources()
 {
-    for(int i = 0; i < gNumFrameResources; ++i)
-    {
-        mFrameResources.push_back(std::make_unique<FrameResource>(md3dDevice.Get(),
-            1, (UINT)mAllRitems.size(), (UINT)mMaterials.size(), mWaves->VertexCount()));
-    }
+	for (int i = 0; i < gNumFrameResources; ++i)
+	{
+		mFrameResources.push_back(std::make_unique<FrameResource>(md3dDevice.Get(),
+			1, (UINT)mAllRitems.size(), (UINT)mMaterials.size(), mWaves->VertexCount()));
+	}
 }
 
 void MyApp::BuildMaterials()
@@ -2238,8 +2438,8 @@ void MyApp::BuildRenderItems()
 {
 	UINT all_CBIndex = 0;
 
-    auto wavesRitem = std::make_unique<RenderItem>();
-    wavesRitem->World = MathHelper::Identity4x4();
+	auto wavesRitem = std::make_unique<RenderItem>();
+	wavesRitem->World = MathHelper::Identity4x4();
 	XMStoreFloat4x4(&wavesRitem->TexTransform, XMMatrixScaling(5.0f, 5.0f, 1.0f));
 	wavesRitem->ObjCBIndex = all_CBIndex++;
 	wavesRitem->Mat = mMaterials["water"].get();
@@ -2250,29 +2450,29 @@ void MyApp::BuildRenderItems()
 	wavesRitem->StartIndexLocation = wavesRitem->Geo->DrawArgs["grid"].StartIndexLocation;
 	wavesRitem->BaseVertexLocation = wavesRitem->Geo->DrawArgs["grid"].BaseVertexLocation;
 
-    mWavesRitem = wavesRitem.get();
+	mWavesRitem = wavesRitem.get();
 
 	mRitemLayer[(int)RenderLayer::Transparent].push_back(wavesRitem.get());
 
-    auto gridRitem = std::make_unique<RenderItem>();
-    gridRitem->World = MathHelper::Identity4x4();
+	auto gridRitem = std::make_unique<RenderItem>();
+	gridRitem->World = MathHelper::Identity4x4();
 	XMStoreFloat4x4(&gridRitem->TexTransform, XMMatrixScaling(5.0f, 5.0f, 1.0f));
 	gridRitem->ObjCBIndex = all_CBIndex++;
 	gridRitem->Mat = mMaterials["grass"].get();
 	gridRitem->Geo = mGeometries["landGeo"].get();
 	gridRitem->PrimitiveType = D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
 	gridRitem->Bounds = gridRitem->Geo->DrawArgs["grid"].Bounds;
-    gridRitem->IndexCount = gridRitem->Geo->DrawArgs["grid"].IndexCount;
-    gridRitem->StartIndexLocation = gridRitem->Geo->DrawArgs["grid"].StartIndexLocation;
-    gridRitem->BaseVertexLocation = gridRitem->Geo->DrawArgs["grid"].BaseVertexLocation;
+	gridRitem->IndexCount = gridRitem->Geo->DrawArgs["grid"].IndexCount;
+	gridRitem->StartIndexLocation = gridRitem->Geo->DrawArgs["grid"].StartIndexLocation;
+	gridRitem->BaseVertexLocation = gridRitem->Geo->DrawArgs["grid"].BaseVertexLocation;
 	gridRitem->Name = "Province";
 
 	mRitemLayer[(int)RenderLayer::Province].push_back(gridRitem.get());
 
-	
+
 	auto boxRitem = RenderItem();
 
-	
+
 
 	boxRitem.ObjCBIndex = 2;
 	boxRitem.Mat = mMaterials["wirefence"].get();
@@ -2291,7 +2491,7 @@ void MyApp::BuildRenderItems()
 		auto newboxRitem_u = std::make_unique<RenderItem>(newboxRitem);
 
 		newboxRitem_u->ObjCBIndex = all_CBIndex++;
-		XMStoreFloat4x4(&newboxRitem_u->World, 
+		XMStoreFloat4x4(&newboxRitem_u->World,
 			XMMatrixScaling(border_wdith, border_wdith * border_height, 2.0f * map_h) +
 			XMMatrixTranslation(1.0f * map_w + border_wdith / 2.f, border_wdith / 2.f, 0.0f)
 		);
@@ -2306,7 +2506,7 @@ void MyApp::BuildRenderItems()
 		newboxRitem_u->ObjCBIndex = all_CBIndex++;
 		XMStoreFloat4x4(&newboxRitem_u->World,
 			XMMatrixScaling(border_wdith, border_wdith * border_height, 2.0f * map_h) +
-			XMMatrixTranslation(- 1.0f * map_w - border_wdith / 2.f, border_wdith / 2.f, 0.0f)
+			XMMatrixTranslation(-1.0f * map_w - border_wdith / 2.f, border_wdith / 2.f, 0.0f)
 		);
 
 		mRitemLayer[(int)RenderLayer::Opaque].push_back(newboxRitem_u.get());
@@ -2352,45 +2552,45 @@ void MyApp::BuildRenderItems()
 	}
 
 
-    mAllRitems.push_back(std::move(wavesRitem));
-    mAllRitems.push_back(std::move(gridRitem));
+	mAllRitems.push_back(std::move(wavesRitem));
+	mAllRitems.push_back(std::move(gridRitem));
 
 
 }
 
 void MyApp::DrawRenderItems(ID3D12GraphicsCommandList* cmdList, const std::vector<RenderItem*>& ritems)
 {
-    UINT objCBByteSize = d3dUtil::CalcConstantBufferByteSize(sizeof(ObjectConstants));
-    UINT matCBByteSize = d3dUtil::CalcConstantBufferByteSize(sizeof(MaterialConstants));
+	UINT objCBByteSize = d3dUtil::CalcConstantBufferByteSize(sizeof(ObjectConstants));
+	UINT matCBByteSize = d3dUtil::CalcConstantBufferByteSize(sizeof(MaterialConstants));
 
 	auto objectCB = mCurrFrameResource->ObjectCB->Resource();
 	auto matCB = mCurrFrameResource->MaterialCB->Resource();
 
-    // For each render item...
-    for(size_t i = 0; i < ritems.size(); ++i)
-    {
-        auto ri = ritems[i];
-		
+	// For each render item...
+	for (size_t i = 0; i < ritems.size(); ++i)
+	{
+		auto ri = ritems[i];
+
 		if (!ri->Visible)
 			continue;
 
-		
-        cmdList->IASetVertexBuffers(0, 1, new D3D12_VERTEX_BUFFER_VIEW(ri->Geo->VertexBufferView()));
-        cmdList->IASetIndexBuffer(new D3D12_INDEX_BUFFER_VIEW(ri->Geo->IndexBufferView()));
-        cmdList->IASetPrimitiveTopology(ri->PrimitiveType);
+
+		cmdList->IASetVertexBuffers(0, 1, new D3D12_VERTEX_BUFFER_VIEW(ri->Geo->VertexBufferView()));
+		cmdList->IASetIndexBuffer(new D3D12_INDEX_BUFFER_VIEW(ri->Geo->IndexBufferView()));
+		cmdList->IASetPrimitiveTopology(ri->PrimitiveType);
 
 		CD3DX12_GPU_DESCRIPTOR_HANDLE tex(mSrvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
 		tex.Offset(ri->Mat->DiffuseSrvHeapIndex, mCbvSrvDescriptorSize);
 
-        D3D12_GPU_VIRTUAL_ADDRESS objCBAddress = objectCB->GetGPUVirtualAddress() + ri->ObjCBIndex*objCBByteSize;
+		D3D12_GPU_VIRTUAL_ADDRESS objCBAddress = objectCB->GetGPUVirtualAddress() + ri->ObjCBIndex*objCBByteSize;
 		D3D12_GPU_VIRTUAL_ADDRESS matCBAddress = matCB->GetGPUVirtualAddress() + ri->Mat->MatCBIndex*matCBByteSize;
 
 		cmdList->SetGraphicsRootDescriptorTable(0, tex);
-        cmdList->SetGraphicsRootConstantBufferView(1, objCBAddress);
-        cmdList->SetGraphicsRootConstantBufferView(3, matCBAddress);
+		cmdList->SetGraphicsRootConstantBufferView(1, objCBAddress);
+		cmdList->SetGraphicsRootConstantBufferView(3, matCBAddress);
 
-        cmdList->DrawIndexedInstanced(ri->IndexCount, 1, ri->StartIndexLocation, ri->BaseVertexLocation, 0);
-    }
+		cmdList->DrawIndexedInstanced(ri->IndexCount, 1, ri->StartIndexLocation, ri->BaseVertexLocation, 0);
+	}
 }
 
 std::array<const CD3DX12_STATIC_SAMPLER_DESC, 6> MyApp::GetStaticSamplers()
@@ -2444,9 +2644,9 @@ std::array<const CD3DX12_STATIC_SAMPLER_DESC, 6> MyApp::GetStaticSamplers()
 		0.0f,                              // mipLODBias
 		8);                                // maxAnisotropy
 
-	return { 
+	return {
 		pointWrap, pointClamp,
-		linearWrap, linearClamp, 
+		linearWrap, linearClamp,
 		anisotropicWrap, anisotropicClamp };
 }
 
