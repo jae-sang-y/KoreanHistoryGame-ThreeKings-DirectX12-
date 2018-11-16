@@ -226,7 +226,7 @@ private:
 
 		}
 	};
-	std::map<ProvinceId, Province> prov_stack;
+
 	using WCHAR3 = WCHAR[3];
 	struct Nation
 	{
@@ -234,9 +234,17 @@ private:
 		std::wstring MainName = L"오류";
 	};
 
+	struct Data
+	{
+		std::map<ProvinceId, Province> province;
+		std::unordered_map<NationId, std::unique_ptr<Nation>>  nations;
+
+	};
+
+	std::unique_ptr<Data> m_gamedata = std::make_unique<Data>();
+
 	XMVECTOR mEyetarget = XMVectorSet(0.0f, 15.0f, 0.0f, 0.0f);
 
-	std::unordered_map<NationId, std::unique_ptr<Nation>>  nations;
 	std::unordered_map<std::wstring, std::wstring> captions;
 	std::unordered_map<std::wstring, HBITMAP> mBitmap;
 
@@ -261,7 +269,7 @@ private:
 		std::wstring index;
 
 		ProvinceId tag_prov;
-		decltype(prov_stack)::iterator tag_prov_it;
+		decltype(Data::province)::iterator tag_prov_it;
 
 	} mQuery;
 
@@ -443,8 +451,6 @@ const XMFLOAT3 MyApp::Convert3Dto2D(FXMVECTOR pos)
 
 	XMFLOAT3 newPos;
 	XMStoreFloat3(&newPos, _pos);
-
-	OutputDebugStringW((Str(newPos.x) + L" : " + Str(newPos.y) + L" : " + Str(newPos.z) + L"\n\n").c_str());
 
 	newPos.x /= newPos.z;
 	newPos.y /= newPos.z;
@@ -696,7 +702,7 @@ void MyApp::Query(const std::wstring& query)
 			mQuery.index = L"";
 			if (*mQuery.word.cbegin() == L"PROVINCE")
 			{
-				mQuery.tag_prov_it = prov_stack.end();
+				mQuery.tag_prov_it = m_gamedata->province.end();
 
 				for (auto O : mQuery.word)
 				{
@@ -707,18 +713,18 @@ void MyApp::Query(const std::wstring& query)
 						if (mQuery.index == L"-id")
 						{
 							mQuery.tag_prov = Long(O);
-							mQuery.tag_prov_it = prov_stack.find(mQuery.tag_prov);
+							mQuery.tag_prov_it = m_gamedata->province.find(mQuery.tag_prov);
 						}
 						else if (mQuery.index == L"-ruler")
 						{
-							if (mQuery.tag_prov_it != prov_stack.end())
+							if (mQuery.tag_prov_it != m_gamedata->province.end())
 							{
 								mQuery.tag_prov_it->second.ruler = Long(O);
 							}
 						}
 						else if (mQuery.index == L"-owner")
 						{
-							if (mQuery.tag_prov_it != prov_stack.end())
+							if (mQuery.tag_prov_it != m_gamedata->province.end())
 							{
 								mQuery.tag_prov_it->second.owner = Long(O);
 							}
@@ -748,7 +754,7 @@ void MyApp::GameSave()
 
 	file << L"SAVE\tSTART" << L";\n";
 
-	for (const auto& O : prov_stack)
+	for (const auto& O : m_gamedata->province)
 	{
 		file << L"PROVINCE" << L"\t" << L"-id " << std::to_wstring(O.first)
 			<< L" -ruler " << std::to_wstring(O.second.ruler)
@@ -806,20 +812,20 @@ void MyApp::GameInit()
 		std::unique_ptr<Nation> 신라 = std::make_unique<Nation>();
 		신라->MainColor = XMFLOAT4(0.5f, 0.5f, 0.1f, 0.75f);
 		신라->MainName = L"신라";
-		nations[++nation_count] = std::move(신라);
+		m_gamedata->nations[++nation_count] = std::move(신라);
 
 		std::unique_ptr<Nation> 백제 = std::make_unique<Nation>();
 		백제->MainColor = XMFLOAT4(0.1f, 0.5f, 0.45f, 0.75f);
 		백제->MainName = L"백제";
-		nations[++nation_count] = std::move(백제);
+		m_gamedata->nations[++nation_count] = std::move(백제);
 
 		std::unique_ptr<Nation> 고구려 = std::make_unique<Nation>();
 		고구려->MainColor = XMFLOAT4(0.4f, 0.0f, 0.0f, 0.75f);
 		고구려->MainName = L"고구려";
-		nations[++nation_count] = std::move(고구려);
+		m_gamedata->nations[++nation_count] = std::move(고구려);
 	}
 	wchar_t buf[256];
-	for (const auto& O : prov_stack)
+	for (const auto& O : m_gamedata->province)
 	{
 		if (O.second.p_num)
 		{
@@ -832,8 +838,8 @@ void MyApp::GameInit()
 	}
 
 
-	//m_DrawItems->Insert(LR"(<img class="myForm" src="Form" left="100" top="100" width="200" height="240" mousedown="FormHold" mouseup="FormUnhold">)");
-	//m_DrawItems->Insert(LR"(<img class="myForm" src="Form" left="400" top="100" width="200" height="240" mousedown="FormHold" mouseup="FormUnhold">)");
+	m_DrawItems->Insert(LR"(<img class="myForm" src="Form" left="100" top="100" width="200" height="240" mousedown="FormHold" mouseup="FormUnhold">)");
+	m_DrawItems->Insert(LR"(<img class="myForm" src="Form" left="400" top="100" width="200" height="240" mousedown="FormHold" mouseup="FormUnhold">)");
 	m_DrawItems->Insert(LR"(<img id="myDiv" src="Cursor" z-index="1" left="0" top="0" width="40" height="40" pointer-events="none">)");
 
 	GameLoad();
@@ -896,7 +902,7 @@ void MyApp::GameUpdate()
 
 
 	XMFLOAT4 rgb;
-	for (const auto& O : prov_stack)
+	for (const auto& O : m_gamedata->province)
 	{
 		if (!O.second.p_num)
 		{
@@ -906,13 +912,13 @@ void MyApp::GameUpdate()
 		mMainPassCB.gSubProv[O.first] = XMFLOAT4(0.f, 0.f, 0.f, 0.f);
 		mMainPassCB.gProv[O.first] = { 0.f,0.f,0.f,0.f };
 
-		if (const auto& P = nations.find(O.second.owner); P != nations.end())
+		if (const auto& P = m_gamedata->nations.find(O.second.owner); P != m_gamedata->nations.end())
 		{
 			rgb = P->second->MainColor;
 			mMainPassCB.gProv[O.first] = P->second->MainColor;
 			mMainPassCB.gSubProv[O.first] = P->second->MainColor;
 		}
-		if (const auto& P = nations.find(O.second.ruler); P != nations.end())
+		if (const auto& P = m_gamedata->nations.find(O.second.ruler); P != m_gamedata->nations.end())
 		{
 			mMainPassCB.gSubProv[O.first] = P->second->MainColor;
 		}
@@ -1021,8 +1027,8 @@ void MyApp::GameClose()
 
 void MyApp::ProvinceMousedown(WPARAM btnState, ProvinceId id)
 {
-	auto prov = prov_stack.find(id);
-	if (prov == prov_stack.end())
+	auto prov = m_gamedata->province.find(id);
+	if (prov == m_gamedata->province.end())
 		return;
 	captions[L"선택한 프로빈스"] = std::to_wstring(id);
 	captions[L"선택한 프로빈스.x"] = std::to_wstring(2.f * prov->second.on3Dpos.x / prov->second.p_num);
@@ -1054,7 +1060,7 @@ void MyApp::ProvinceMousedown(WPARAM btnState, ProvinceId id)
 	if (btnState & MK_MBUTTON)
 	{
 
-		if (const auto& O = nations.find(prov->second.owner); O != nations.end())
+		if (const auto& O = m_gamedata->nations.find(prov->second.owner); O != m_gamedata->nations.end())
 		{
 			mUser.nationPick = prov->second.owner;
 			captions[L"선택한 국가"] = O->second->MainName;
@@ -1099,7 +1105,7 @@ void MyApp::OnKeyDown(WPARAM btnState)
 	{
 	case VK_SPACE:
 	{
-		const auto& key = std::next(std::begin(nations), rand() % nations.size());
+		const auto& key = std::next(std::begin(m_gamedata->nations), rand() % m_gamedata->nations.size());
 		captions[L"선택한 국가"] = key->second->MainName;
 		mUser.nationPick = key->first;
 		return;
@@ -1405,7 +1411,6 @@ void MyApp::OnMouseDown(WPARAM btnState, int x, int y)
 			focus = O->uuid;
 
 			Execute(A[L"mousedown"], O->uuid);
-			OutputDebugStringW((O->Attribute[L"id"] + L"\n").c_str());
 
 			SetCapture(mhMainWnd);
 			return;
@@ -2020,9 +2025,9 @@ void MyApp::BuildLandGeometry()
 				if (auto search = prov_key.find(dex); search != prov_key.end())
 				{
 					mLandVertices[x + y * w].Prov = search->second.first;
-					if (auto search_stack = prov_stack.find(search->second.first); search_stack == prov_stack.end())
+					if (auto search_stack = m_gamedata->province.find(search->second.first); search_stack == m_gamedata->province.end())
 					{
-						prov_stack.insert(std::make_pair(search->second.first, Province(search->second.second, dex, XMFLOAT3(mLandVertices[x + y * w].Pos.x, mLandVertices[x + y * w].Pos.y, mLandVertices[x + y * w].Pos.z))));
+						m_gamedata->province.insert(std::make_pair(search->second.first, Province(search->second.second, dex, XMFLOAT3(mLandVertices[x + y * w].Pos.x, mLandVertices[x + y * w].Pos.y, mLandVertices[x + y * w].Pos.z))));
 					}
 					else
 					{
@@ -2082,7 +2087,7 @@ void MyApp::BuildLandGeometry()
 			OutputDebugStringA(("Unregisted Color (" + std::to_string(r) + ", " + std::to_string(g) + ", " + std::to_string(b) + ") x " + std::to_string(O.second.second) + " : It looks like (" + std::to_string(O.second.first.x) + ", " + std::to_string(O.second.first.y) + ", " + std::to_string(O.second.first.z) + ")\n").c_str());
 		}
 
-		for (auto& O : prov_stack)
+		for (auto& O : m_gamedata->province)
 		{
 			int x = (int)(1.f * O.second.pixel.x / O.second.p_num + (map_w - 1.f) / 2.f);
 			int y = (int)(1.f * O.second.pixel.z / O.second.p_num + (map_h - 1.f) / 2.f);
