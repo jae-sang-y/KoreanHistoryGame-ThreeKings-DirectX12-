@@ -18,7 +18,7 @@
 
 #include "d3dUtil.h"
 #include "GameTimer.h"
-#include "B:/Project/DirectXPractice/FrameResource.h"
+#include "../FrameResource.h"
 
 // Link necessary d3d12 libraries.
 #pragma comment(lib,"d3dcompiler.lib")

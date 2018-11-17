@@ -831,6 +831,8 @@ void MyApp::GameInit()
 		{
 			swprintf_s(buf, LR"(<div id="prov%.0lf" enable="disable" opacity="0.5">)", (double)O.first);
 			m_DrawItems->Insert(buf);
+			swprintf_s(buf, LR"(<div id="provarmy%.0lf" enable="disable" opacity="0.5">)", (double)O.first);
+			m_DrawItems->Insert(buf);
 			swprintf_s(buf, LR"(<a id="provtext%.0lf" enable="disable" opacity="1.0">)", (double)O.first);
 			m_DrawItems->Insert(buf);
 		}
@@ -838,9 +840,9 @@ void MyApp::GameInit()
 	}
 
 
-	m_DrawItems->Insert(LR"(<img class="myForm" src="Form" left="100" top="100" width="200" height="240" mousedown="FormHold" mouseup="FormUnhold">)");
-	m_DrawItems->Insert(LR"(<img class="myForm" src="Form" left="400" top="100" width="200" height="240" mousedown="FormHold" mouseup="FormUnhold">)");
-	m_DrawItems->Insert(LR"(<img id="myDiv" src="Cursor" z-index="1" left="0" top="0" width="40" height="40" pointer-events="none">)");
+	m_DrawItems->Insert(LR"(<img class="myForm" src="Form" left="100" top="100" width="200" height="240" mousedown="FormHold" mouseup="FormUnhold" z-index="2">)");
+	m_DrawItems->Insert(LR"(<img class="myForm" src="Form" left="400" top="100" width="200" height="240" mousedown="FormHold" mouseup="FormUnhold" z-index="2">)");
+	m_DrawItems->Insert(LR"(<img id="myDiv" src="Cursor" z-index="100000" left="0" top="0" width="40" height="40" pointer-events="none">)");
 
 	GameLoad();
 }
@@ -854,12 +856,12 @@ void MyApp::Execute(const std::wstring& func_name, const std::uint64_t& uuid)
 		O->Attribute[L"hold"] = L"1";
 		O->Attribute[L"FirstMousePos.x"] = Str(mLastMousePos.x);
 		O->Attribute[L"FirstMousePos.y"] = Str(mLastMousePos.y);
-		O->Attribute[L"z-index"] = L"0.5";
+		O->Attribute[L"z-index"] = L"2.5";
 	}
 	else if (func_name == L"FormUnhold")
 	{
 		O->Attribute[L"hold"] = L"0";
-		O->Attribute[L"z-index"] = L"0";
+		O->Attribute[L"z-index"] = L"2";
 	}
 
 	//O->Attribute[L"left"] = Str(Float(O->Attribute[L"left"]) + 5.f);
@@ -930,14 +932,16 @@ void MyApp::GameUpdate()
 		pos.z /= 2.f;
 		pos.y += 3.f;
 		XMFLOAT3 s = Convert3Dto2D(XMLoadFloat3(&pos));
+		pos.y -= 3.f;
+		XMFLOAT3 s2 = Convert3Dto2D(XMLoadFloat3(&pos));
 //		OutputDebugStringW((Str(pos.x) + L" : " + Str(pos.y) + L" : " + Str(pos.z) + L"\n").c_str());
 //		OutputDebugStringW((Str(s.x) + L" : " + Str(s.y) + L" : " + Str(s.z) + L"\n\n").c_str());
 
 		float w = mClientHeight / 30.f * O.second.name.length() + 10.f;
 		float h = mClientHeight / 25.f;
 		float size = 25.0f / s.z;
-
-		if (s.z > 0.f)
+		float depth = (s.z - 1.f) / (1000.f - 1.f);
+		if (s.z >= 1.f && s.z <= 1000.0f)
 		{
 			w *= size;
 			h *= size;
@@ -951,6 +955,7 @@ void MyApp::GameUpdate()
 					L"top",Str(s.y),
 					L"width", Str(w),
 					L"height",Str(h),
+					L"z-index", Str(1 - depth),
 					L"border", L"line",
 					L"horizontal-align", L"center",
 					L"vertical-align", L"center"
@@ -968,7 +973,7 @@ void MyApp::GameUpdate()
 					L"width", Str(w),
 					L"height", Str(h),
 					L"text", O.second.name,
-
+					L"z-index", Str(1 - depth),
 					L"horizontal-align", L"center",
 					L"vertical-align", L"center"
 				}
