@@ -233,11 +233,16 @@ private:
 		XMFLOAT4 MainColor = { 0.f, 0.f, 0.f, 0.f };
 		std::wstring MainName = L"오류";
 	};
-
+	struct Leader
+	{
+		ProvinceId location;
+		Leader(const ProvinceId& loc) : location(loc) {};
+	};
 	struct Data
 	{
-		std::map<ProvinceId, Province> province;
+		std::map<ProvinceId, std::unique_ptr<Province>> province;
 		std::unordered_map<NationId, std::unique_ptr<Nation>>  nations;
+		std::list<std::unique_ptr<Leader>> leaders;
 
 	};
 
@@ -414,6 +419,7 @@ void MyApp::BuildImage()
 	};
 	loadBitmap(LR"(Images\cursor.png)", L"Cursor");
 	loadBitmap(LR"(Images\form.png)", L"Form");
+	loadBitmap(LR"(Images\window.png)", L"Window");
 }
 
 void MyApp::Update(const GameTimer& gt)
@@ -719,14 +725,14 @@ void MyApp::Query(const std::wstring& query)
 						{
 							if (mQuery.tag_prov_it != m_gamedata->province.end())
 							{
-								mQuery.tag_prov_it->second.ruler = Long(O);
+								mQuery.tag_prov_it->second->ruler = Long(O);
 							}
 						}
 						else if (mQuery.index == L"-owner")
 						{
 							if (mQuery.tag_prov_it != m_gamedata->province.end())
 							{
-								mQuery.tag_prov_it->second.owner = Long(O);
+								mQuery.tag_prov_it->second->owner = Long(O);
 							}
 						}
 
@@ -757,8 +763,8 @@ void MyApp::GameSave()
 	for (const auto& O : m_gamedata->province)
 	{
 		file << L"PROVINCE" << L"\t" << L"-id " << std::to_wstring(O.first)
-			<< L" -ruler " << std::to_wstring(O.second.ruler)
-			<< L" -owner " << std::to_wstring(O.second.owner) << L";\n";
+			<< L" -ruler " << std::to_wstring(O.second->ruler)
+			<< L" -owner " << std::to_wstring(O.second->owner) << L";\n";
 	}
 
 	file << L"SAVE\tEND" << L";\n";
@@ -824,10 +830,16 @@ void MyApp::GameInit()
 		고구려->MainName = L"고구려";
 		m_gamedata->nations[++nation_count] = std::move(고구려);
 	}
+
+	m_gamedata->leaders.push_back(std::make_unique<Leader>(10));
+
+	m_DrawItems->Insert(LR"(<img id="leader0" src="Window" z-index="100000" left="0" top="0" width="40" height="40" pointer-events="none">)");
+
+
 	wchar_t buf[256];
 	for (const auto& O : m_gamedata->province)
 	{
-		if (O.second.p_num)
+		if (O.second->p_num)
 		{
 			swprintf_s(buf, LR"(<div id="prov%.0lf" enable="disable" opacity="0.5">)", (double)O.first);
 			m_DrawItems->Insert(buf);
@@ -906,7 +918,7 @@ void MyApp::GameUpdate()
 	XMFLOAT4 rgb;
 	for (const auto& O : m_gamedata->province)
 	{
-		if (!O.second.p_num)
+		if (!O.second->p_num)
 		{
 			continue;
 		}
@@ -914,19 +926,19 @@ void MyApp::GameUpdate()
 		mMainPassCB.gSubProv[O.first] = XMFLOAT4(0.f, 0.f, 0.f, 0.f);
 		mMainPassCB.gProv[O.first] = { 0.f,0.f,0.f,0.f };
 
-		if (const auto& P = m_gamedata->nations.find(O.second.owner); P != m_gamedata->nations.end())
+		if (const auto& P = m_gamedata->nations.find(O.second->owner); P != m_gamedata->nations.end())
 		{
 			rgb = P->second->MainColor;
 			mMainPassCB.gProv[O.first] = P->second->MainColor;
 			mMainPassCB.gSubProv[O.first] = P->second->MainColor;
 		}
-		if (const auto& P = m_gamedata->nations.find(O.second.ruler); P != m_gamedata->nations.end())
+		if (const auto& P = m_gamedata->nations.find(O.second->ruler); P != m_gamedata->nations.end())
 		{
 			mMainPassCB.gSubProv[O.first] = P->second->MainColor;
 		}
 
 
-		XMFLOAT3 pos = O.second.on3Dpos;
+		XMFLOAT3 pos = O.second->on3Dpos;
 		pos.x /= 2.f;
 		pos.y /= 2.f;
 		pos.z /= 2.f;
@@ -937,7 +949,7 @@ void MyApp::GameUpdate()
 //		OutputDebugStringW((Str(pos.x) + L" : " + Str(pos.y) + L" : " + Str(pos.z) + L"\n").c_str());
 //		OutputDebugStringW((Str(s.x) + L" : " + Str(s.y) + L" : " + Str(s.z) + L"\n\n").c_str());
 
-		float w = mClientHeight / 30.f * O.second.name.length() + 10.f;
+		float w = mClientHeight / 30.f * O.second->name.length() + 10.f;
 		float h = mClientHeight / 25.f;
 		float size = 25.0f / s.z;
 		float depth = (s.z - 1.f) / (1000.f - 1.f);
@@ -972,7 +984,7 @@ void MyApp::GameUpdate()
 					L"top", Str(s.y),
 					L"width", Str(w),
 					L"height", Str(h),
-					L"text", O.second.name,
+					L"text", O.second->name,
 					L"z-index", Str(1 - depth),
 					L"horizontal-align", L"center",
 					L"vertical-align", L"center"
@@ -1036,38 +1048,38 @@ void MyApp::ProvinceMousedown(WPARAM btnState, ProvinceId id)
 	if (prov == m_gamedata->province.end())
 		return;
 	captions[L"선택한 프로빈스"] = std::to_wstring(id);
-	captions[L"선택한 프로빈스.x"] = std::to_wstring(2.f * prov->second.on3Dpos.x / prov->second.p_num);
-	captions[L"선택한 프로빈스.z"] = std::to_wstring(2.f * prov->second.on3Dpos.z / prov->second.p_num);
+	captions[L"선택한 프로빈스.x"] = std::to_wstring(2.f * prov->second->on3Dpos.x / prov->second->p_num);
+	captions[L"선택한 프로빈스.z"] = std::to_wstring(2.f * prov->second->on3Dpos.z / prov->second->p_num);
 
 	if (btnState & MK_LBUTTON)
 	{
-		if (prov->second.owner == 0)
+		if (prov->second->owner == 0)
 		{
-			prov->second.ruler = mUser.nationPick;
-			prov->second.owner = mUser.nationPick;
+			prov->second->ruler = mUser.nationPick;
+			prov->second->owner = mUser.nationPick;
 		}
-		else if (prov->second.ruler != mUser.nationPick)
+		else if (prov->second->ruler != mUser.nationPick)
 		{
-			prov->second.ruler = mUser.nationPick;
+			prov->second->ruler = mUser.nationPick;
 		}
 		else
 		{
-			prov->second.owner = mUser.nationPick;
+			prov->second->owner = mUser.nationPick;
 		}
 		return;
 	}
 	if (btnState & MK_RBUTTON)
 	{
-		prov->second.ruler = mUser.nationPick;
+		prov->second->ruler = mUser.nationPick;
 
 		return;
 	}
 	if (btnState & MK_MBUTTON)
 	{
 
-		if (const auto& O = m_gamedata->nations.find(prov->second.owner); O != m_gamedata->nations.end())
+		if (const auto& O = m_gamedata->nations.find(prov->second->owner); O != m_gamedata->nations.end())
 		{
-			mUser.nationPick = prov->second.owner;
+			mUser.nationPick = prov->second->owner;
 			captions[L"선택한 국가"] = O->second->MainName;
 		}
 		else
@@ -2032,14 +2044,14 @@ void MyApp::BuildLandGeometry()
 					mLandVertices[x + y * w].Prov = search->second.first;
 					if (auto search_stack = m_gamedata->province.find(search->second.first); search_stack == m_gamedata->province.end())
 					{
-						m_gamedata->province.insert(std::make_pair(search->second.first, Province(search->second.second, dex, XMFLOAT3(mLandVertices[x + y * w].Pos.x, mLandVertices[x + y * w].Pos.y, mLandVertices[x + y * w].Pos.z))));
+						m_gamedata->province.insert(std::make_pair(search->second.first, std::make_unique<Province>(search->second.second, dex, XMFLOAT3(mLandVertices[x + y * w].Pos.x, mLandVertices[x + y * w].Pos.y, mLandVertices[x + y * w].Pos.z))));
 					}
 					else
 					{
-						search_stack->second.pixel.x += mLandVertices[x + y * w].Pos.x;
-						search_stack->second.pixel.y += mLandVertices[x + y * w].Pos.y;
-						search_stack->second.pixel.z += mLandVertices[x + y * w].Pos.z;
-						++search_stack->second.p_num;
+						search_stack->second->pixel.x += mLandVertices[x + y * w].Pos.x;
+						search_stack->second->pixel.y += mLandVertices[x + y * w].Pos.y;
+						search_stack->second->pixel.z += mLandVertices[x + y * w].Pos.z;
+						++search_stack->second->p_num;
 					}
 				}
 				else if (dex * (dex - 8421504) != 0)
@@ -2094,15 +2106,15 @@ void MyApp::BuildLandGeometry()
 
 		for (auto& O : m_gamedata->province)
 		{
-			int x = (int)(1.f * O.second.pixel.x / O.second.p_num + (map_w - 1.f) / 2.f);
-			int y = (int)(1.f * O.second.pixel.z / O.second.p_num + (map_h - 1.f) / 2.f);
+			int x = (int)(1.f * O.second->pixel.x / O.second->p_num + (map_w - 1.f) / 2.f);
+			int y = (int)(1.f * O.second->pixel.z / O.second->p_num + (map_h - 1.f) / 2.f);
 
 
 			if (x >= 0 && x < map_w && y >= 0 && y < map_h)
 			{
-				O.second.on3Dpos.x = 2.f * O.second.pixel.x / O.second.p_num;
-				O.second.on3Dpos.y = 2.f * mLandVertices.at(x + map_w * y).Pos.y - 2.f;
-				O.second.on3Dpos.z = 2.f * O.second.pixel.z / O.second.p_num;
+				O.second->on3Dpos.x = 2.f * O.second->pixel.x / O.second->p_num;
+				O.second->on3Dpos.y = 2.f * mLandVertices.at(x + map_w * y).Pos.y - 2.f;
+				O.second->on3Dpos.z = 2.f * O.second->pixel.z / O.second->p_num;
 			}
 		}
 
