@@ -914,8 +914,10 @@ void MyApp::GameUpdate()
 		}
 	}
 
-
 	XMFLOAT4 rgb;
+	
+	for (const auto& O : )
+
 	for (const auto& O : m_gamedata->province)
 	{
 		if (!O.second->p_num)
