@@ -152,7 +152,7 @@ private:
 
 	void Query(const std::wstring& query);
 	void Execute(const std::wstring& func_name, const std::uint64_t& uuid);
-
+	std::list<YTML::DrawItem>::reverse_iterator MyApp::MouseOnUI(int x, int y);
 private:
 
 	UINT mCbvSrvDescriptorSize = 0;
@@ -235,15 +235,25 @@ private:
 	};
 	struct Leader
 	{
+		bool enable = true;
 		ProvinceId location;
-		Leader(const ProvinceId& loc) : location(loc) {};
+		const std::uint64_t uuid;
+		bool selected = false;
+		NationId owner;
+		Leader(const ProvinceId& loc, const NationId own, const std::uint64_t _uuid) : location(loc), uuid(_uuid), owner(own) {};
 	};
+
 	struct Data
 	{
 		std::map<ProvinceId, std::unique_ptr<Province>> province;
 		std::unordered_map<NationId, std::unique_ptr<Nation>>  nations;
-		std::list<std::unique_ptr<Leader>> leaders;
 
+		std::list<std::shared_ptr<Leader>> leaders;
+		std::uint64_t leader_progress = 0;
+		Leader NewLeader(const ProvinceId& loc, const NationId own)
+		{
+			return Leader(loc, own, leader_progress++);
+		}
 	};
 
 	std::unique_ptr<Data> m_gamedata = std::make_unique<Data>();
@@ -420,6 +430,14 @@ void MyApp::BuildImage()
 	loadBitmap(LR"(Images\cursor.png)", L"Cursor");
 	loadBitmap(LR"(Images\form.png)", L"Form");
 	loadBitmap(LR"(Images\window.png)", L"Window");
+	loadBitmap(LR"(Images\flags\말갈.bmp)", L"말갈");
+	wchar_t buf[256];
+	for (const auto& O : m_gamedata->nations)
+	{
+		swprintf_s(buf, LR"(Images\flags\%ls.bmp)", O.second->MainName.c_str());
+		loadBitmap(buf, O.second->MainName);
+
+	}
 }
 
 void MyApp::Update(const GameTimer& gt)
@@ -481,27 +499,30 @@ void MyApp::DrawUI()
 	m_DrawItems->Sort();
 	for (auto& O : m_DrawItems->data)
 	{
-		auto& A = O.Attribute;
-		if (A[L"enable"] == L"disable")
+		if (O[L"enable"] == L"disable")
 			continue;
 
 		try
 		{
-			m_d2d->Brush[L"Temp"]->SetColor(D2D1::ColorF(Float(A[L"color-r"]), Float(A[L"color-g"]), Float(A[L"color-b"])));
-			m_d2d->Brush[L"Temp"]->SetOpacity(1.0f);// Float(A[L"opacity"]));
+			m_d2d->Brush[L"Main"]->SetColor(D2D1::ColorF(Float(O[L"color-r"]), Float(O[L"color-g"]), Float(O[L"color-b"])));
+			m_d2d->Brush[L"Main"]->SetOpacity(Float(O[L"opacity"]));
+			m_d2d->Brush[L"Back"]->SetColor(D2D1::ColorF(Float(O[L"background-color-r"]), Float(O[L"background-color-g"]), Float(O[L"background-color-b"])));
+			m_d2d->Brush[L"Back"]->SetOpacity(Float(O[L"opacity"]));
 
-			point.x = Float(A[L"left"]);
-			point.y = Float(A[L"top"]);
+			point.x = Float(O[L"left"]);
+			point.y = Float(O[L"top"]);
+			point.x += Float(O[L"position-left"]);
+			point.y += Float(O[L"position-top"]);
 
-			size.width = Float(A[L"width"]);
-			size.height = Float(A[L"height"]);
+			size.width = Float(O[L"width"]);
+			size.height = Float(O[L"height"]);
 
-			if (A[L"horizontal-align"] == L"center")
+			if (O[L"horizontal-align"] == L"center")
 			{
 				rect.left = point.x - size.width / 2.f;
 				rect.right = point.x + size.width / 2.f;
 			}
-			else if (A[L"horizontal-align"] == L"right")
+			else if (O[L"horizontal-align"] == L"right")
 			{
 				rect.left = point.x - size.width;
 				rect.right = point.x;
@@ -512,12 +533,12 @@ void MyApp::DrawUI()
 				rect.right = point.x + size.width;
 			}
 
-			if (A[L"vertical-align"] == L"center")
+			if (O[L"vertical-align"] == L"center")
 			{
 				rect.top = point.y - size.height / 2.f;
 				rect.bottom = point.y + size.height / 2.f;
 			}
-			else if (A[L"vertical-align"] == L"top")
+			else if (O[L"vertical-align"] == L"top")
 			{
 				rect.top = point.y - size.height;
 				rect.bottom = point.y;
@@ -529,29 +550,32 @@ void MyApp::DrawUI()
 			}
 
 
-			if (A[L"tag"] == L"div")
+			if (O[L"tag"] == L"div")
 			{
-				g->FillRectangle(rect, m_d2d->Brush[L"Temp"].Get());
-				//OutputDebugStringW(((A[L"left"]) + L" : " + (A[L"top"]) + L"\n").c_str());
+				if (O[L"background"] == L"enable")
+					g->FillRectangle(rect, m_d2d->Brush[L"Back"].Get());
+				if (O[L"border"] == L"enable")
+					g->DrawRectangle(rect, m_d2d->Brush[L"Main"].Get());
+				//OutputDebugStringW(((O[L"left"]) + L" : " + (O[L"top"]) + L"\n").c_str());
 			}
-			else if (A[L"tag"] == L"a")
+			else if (O[L"tag"] == L"a")
 			{
 				m_d2d->textLayout.Reset();
 				ThrowIfFailed(m_d2d->dwriteFactory->CreateTextLayout(
-					A[L"text"].c_str(), (UINT32)A[L"text"].length(),
+					O[L"text"].c_str(), (UINT32)O[L"text"].length(),
 					m_d2d->textFormat[L"Above Province"].Get(),
 					size.width, size.height,
 					m_d2d->textLayout.GetAddressOf()
 				));
-				m_d2d->textLayout->SetFontSize(size.height, { 0U,  (UINT32)A[L"text"].length() });
+				m_d2d->textLayout->SetFontSize(size.height * 0.8f, { 0U,  (UINT32)O[L"text"].length() });
 
 				g->DrawTextLayout(D2D1::Point2F(rect.left, rect.top), m_d2d->textLayout.Get(),
-					m_d2d->Brush[L"Temp"].Get(), D2D1_DRAW_TEXT_OPTIONS_CLIP
+					m_d2d->Brush[L"Main"].Get(), D2D1_DRAW_TEXT_OPTIONS_CLIP
 				);
 			}
-			else if (A[L"tag"] == L"img")
+			else if (O[L"tag"] == L"img")
 			{
-				auto& B = m_d2d->pD2DBitmap[A[L"src"]];
+				auto& B = m_d2d->pD2DBitmap[O[L"src"]];
 				m_d2d->BitmapBrush->SetBitmap(B.data.Get());
 
 				scale.width = (rect.right - rect.left) / B.width;
@@ -568,13 +592,13 @@ void MyApp::DrawUI()
 		catch (const std::exception&)
 		{
 			OutputDebugStringW(L"[");
-			OutputDebugStringW(A[L"id"].c_str());
+			OutputDebugStringW(O[L"id"].c_str());
 			OutputDebugStringW(L"]:[");
-			OutputDebugStringW(A[L"class"].c_str());
+			OutputDebugStringW(O[L"class"].c_str());
 			OutputDebugStringW(L"]<");
-			OutputDebugStringW(A[L"tag"].c_str());
+			OutputDebugStringW(O[L"tag"].c_str());
 			OutputDebugStringW(L">\n");
-			A[L"enable"] = L"disable";
+			O[L"enable"] = L"disable";
 		}
 	}
 }
@@ -831,29 +855,34 @@ void MyApp::GameInit()
 		m_gamedata->nations[++nation_count] = std::move(고구려);
 	}
 
-	m_gamedata->leaders.push_back(std::make_unique<Leader>(10));
-
-	m_DrawItems->Insert(LR"(<img id="leader0" src="Window" z-index="100000" left="0" top="0" width="40" height="40" pointer-events="none">)");
-
 
 	wchar_t buf[256];
 	for (const auto& O : m_gamedata->province)
 	{
 		if (O.second->p_num)
 		{
-			swprintf_s(buf, LR"(<div id="prov%.0lf" enable="disable" opacity="0.5">)", (double)O.first);
-			m_DrawItems->Insert(buf);
-			swprintf_s(buf, LR"(<div id="provarmy%.0lf" enable="disable" opacity="0.5">)", (double)O.first);
-			m_DrawItems->Insert(buf);
+			swprintf_s(buf, LR"(<div id="prov%.0lf" enable="disable" background="enable" opacity="0.5">)", (double)O.first);
+			auto E = m_DrawItems->Insert(buf);
 			swprintf_s(buf, LR"(<a id="provtext%.0lf" enable="disable" opacity="1.0">)", (double)O.first);
-			m_DrawItems->Insert(buf);
+			m_DrawItems->Insert(buf, E->uuid);
 		}
-		//captions[buf] = L"";
 	}
 
 
-	m_DrawItems->Insert(LR"(<img class="myForm" src="Form" left="100" top="100" width="200" height="240" mousedown="FormHold" mouseup="FormUnhold" z-index="2">)");
-	m_DrawItems->Insert(LR"(<img class="myForm" src="Form" left="400" top="100" width="200" height="240" mousedown="FormHold" mouseup="FormUnhold" z-index="2">)");
+	std::uint64_t EM = m_DrawItems->Insert(LR"(<img class="myForm" id="myForm0" src="Form" left="100" top="100" width="200" height="240" mousedown="FormHold" mouseup="FormUnhold" z-index="2">)")->uuid;
+	m_DrawItems->Insert(LR"(<div id="head" src="Window" left="13" top="30" width="174" height="18" z-index="1e-6" border="enable" pointer-events="none">)", EM);
+	m_DrawItems->Insert(LR"(<div id="tail" src="Window" left="13" top="226" width="174" height="12" z-index="1e-6" border="enable">)", EM);
+
+	m_DrawItems->Insert(LR"(<div id="flag" src="Window" left="25" top="66" width="62" height="62" z-index="1e-6" color-b="0" color-g="0" border="enable">)", EM);
+
+	std::uint64_t EME = m_DrawItems->Insert(LR"(<div src="Window" left="100" top="76" width="80" height="44" z-index="1e-6" color-b="0" color-r="0" border="enable">)", EM)->uuid;
+	m_DrawItems->Insert(LR"(<div id="text0" src="Window" left="0" top="0" width="80" height="16" z-index="1e-6" border="enable" color-g="0">)", EME);
+	m_DrawItems->Insert(LR"(<div id="text1" src="Window" left="0" top="18" width="60" height="12" z-index="1e-6" border="enable" color-g="0">)", EME);
+	m_DrawItems->Insert(LR"(<div id="text2" src="Window" left="0" top="32" width="60" height="12" z-index="1e-6" border="enable" color-g="0">)", EME);
+
+	m_DrawItems->Insert(LR"(<div id="buttonbar" src="Window" left="13" top="146" width="174" height="20" z-index="1e-6" border="enable">)", EM);
+
+
 	m_DrawItems->Insert(LR"(<img id="myDiv" src="Cursor" z-index="100000" left="0" top="0" width="40" height="40" pointer-events="none">)");
 
 	GameLoad();
@@ -861,63 +890,53 @@ void MyApp::GameInit()
 
 void MyApp::Execute(const std::wstring& func_name, const std::uint64_t& uuid)
 {
-	auto& O = m_DrawItems->withUUID(uuid);
+	
 
-	if (func_name == L"FormHold")
+	for (auto& O : m_DrawItems->$(Str(uuid)))
 	{
-		O->Attribute[L"hold"] = L"1";
-		O->Attribute[L"FirstMousePos.x"] = Str(mLastMousePos.x);
-		O->Attribute[L"FirstMousePos.y"] = Str(mLastMousePos.y);
-		O->Attribute[L"z-index"] = L"2.5";
+		if (func_name == L"FormHold")
+		{
+			(*O)[L"hold"] = L"1";
+			(*O)[L"FirstMousePos.x"] = Str(mLastMousePos.x);
+			(*O)[L"FirstMousePos.y"] = Str(mLastMousePos.y);
+			(*O)[L"z-index"] = L"2.5";
+		}
+		else if (func_name == L"FormUnhold")
+		{
+			(*O)[L"hold"] = L"0";
+			(*O)[L"z-index"] = L"2";
+		}
 	}
-	else if (func_name == L"FormUnhold")
-	{
-		O->Attribute[L"hold"] = L"0";
-		O->Attribute[L"z-index"] = L"2";
-	}
-
-	//O->Attribute[L"left"] = Str(Float(O->Attribute[L"left"]) + 5.f);
-
-
-
 }
 
 void MyApp::GameUpdate()
 {
-	m_DrawItems->withID(L"myDiv",
-		{
-			L"left", Str(mLastMousePos.x),
-			L"top", Str(mLastMousePos.y)
-		}
-	);
+	m_DrawItems->$(L"#myDiv").css({
+		L"left", Str(mLastMousePos.x),
+		L"top", Str(mLastMousePos.y)
+	});
 
+	
+	for (auto& O : m_DrawItems->$(L".myForm"))
 	{
-		//OutputDebugStringW(Str(m_DrawItems->withClass(L"myForm").size()).c_str());
-		auto List = m_DrawItems->withClass(L"myForm");
-		//OutputDebugStringW(Str(List.size()).c_str());
-		for (auto& O : List)
+		if ((*O)[L"hold"] == L"1")
 		{
-			if (O->Attribute[L"hold"] == L"1")
-			{
-				O->Attribute[L"left"] = Str(Float(O->Attribute[L"left"]) + mLastMousePos.x - Float(O->Attribute[L"FirstMousePos.x"]));
-				O->Attribute[L"top"] = Str(Float(O->Attribute[L"top"]) + mLastMousePos.y - Float(O->Attribute[L"FirstMousePos.y"]));
-				O->Attribute[L"FirstMousePos.x"] = Str(mLastMousePos.x);
-				O->Attribute[L"FirstMousePos.y"] = Str(mLastMousePos.y);
+			(*O)[L"left"] = Str(Float((*O)[L"left"]) + mLastMousePos.x - Float((*O)[L"FirstMousePos.x"]));
+			(*O)[L"top"] = Str(Float((*O)[L"top"]) + mLastMousePos.y - Float((*O)[L"FirstMousePos.y"]));
+			(*O)[L"FirstMousePos.x"] = Str(mLastMousePos.x);
+			(*O)[L"FirstMousePos.y"] = Str(mLastMousePos.y);
 
-				//O->z_index = 1.f;
-			}
-			else
-			{
-				//O->z_index = 0.f;
-			}
-
+			//O->z_index = 1.f;
 		}
+		else
+		{
+			//O->z_index = 0.f;
+		}
+
 	}
 
 	XMFLOAT4 rgb;
-	
-	for (const auto& O : )
-
+	std::list<std::shared_ptr<Leader>> itr_buf;
 	for (const auto& O : m_gamedata->province)
 	{
 		if (!O.second->p_num)
@@ -948,22 +967,20 @@ void MyApp::GameUpdate()
 		XMFLOAT3 s = Convert3Dto2D(XMLoadFloat3(&pos));
 		pos.y -= 3.f;
 		XMFLOAT3 s2 = Convert3Dto2D(XMLoadFloat3(&pos));
-//		OutputDebugStringW((Str(pos.x) + L" : " + Str(pos.y) + L" : " + Str(pos.z) + L"\n").c_str());
-//		OutputDebugStringW((Str(s.x) + L" : " + Str(s.y) + L" : " + Str(s.z) + L"\n\n").c_str());
 
-		float w = mClientHeight / 30.f * O.second->name.length() + 10.f;
-		float h = mClientHeight / 25.f;
+		float w = mClientHeight / 20.f * O.second->name.length() + 10.f;
+		float h = mClientHeight / 15.f;
 		float size = 25.0f / s.z;
 		float depth = (s.z - 1.f) / (1000.f - 1.f);
 		if (s.z >= 1.f && s.z <= 1000.0f)
 		{
 			w *= size;
 			h *= size;
-			m_DrawItems->withID(L"prov" + Str(O.first),
+			m_DrawItems->$(L"#prov" + Str(O.first)).css(
 				{
-					L"color-r", Str(rgb.x / 1.5f),
-					L"color-g", Str(rgb.y / 1.5f),
-					L"color-b", Str(rgb.z / 1.5f),
+					L"background-color-r", Str(rgb.x / 1.5f),
+					L"background-color-g", Str(rgb.y / 1.5f),
+					L"background-color-b", Str(rgb.z / 1.5f),
 					L"enable", L"enable",
 					L"left", Str(s.x),
 					L"top",Str(s.y),
@@ -976,18 +993,13 @@ void MyApp::GameUpdate()
 				}
 			);
 
-			m_DrawItems->withID(L"provtext" + Str(O.first),
+			m_DrawItems->$(L"#provtext" + Str(O.first)).css(
 				{
-					L"color-r",  L"1",
-					L"color-g", L"1",
-					L"color-b",  L"1",
 					L"enable", L"enable",
-					L"left", Str(s.x),
-					L"top", Str(s.y),
 					L"width", Str(w),
 					L"height", Str(h),
 					L"text", O.second->name,
-					L"z-index", Str(1 - depth),
+					L"z-index", Str(1 - depth + 1e-6),
 					L"horizontal-align", L"center",
 					L"vertical-align", L"center"
 				}
@@ -995,7 +1007,7 @@ void MyApp::GameUpdate()
 		}
 		else
 		{
-			m_DrawItems->withID(L"prov" + Str(O.first),
+			m_DrawItems->$(L"#prov" + Str(O.first)).css(
 				{
 					L"enable", L"disable",
 					L"left", L"0",
@@ -1003,13 +1015,72 @@ void MyApp::GameUpdate()
 				}
 			);
 
-			m_DrawItems->withID(L"provtext" + Str(O.first),
+			m_DrawItems->$(L"#provtext" + Str(O.first)).css(
 				{
 					L"enable", L"disable",
 					L"left", L"0",
 					L"top", L"0"
 				}
 			);
+		}
+
+		itr_buf.clear();
+		for (const auto& P : m_gamedata->leaders)
+		{
+			if (P->location == O.first)
+			{
+				itr_buf.push_back(P);
+			}
+		}
+
+		std::uint64_t  i = 0;
+		for (const auto& P : itr_buf)
+		{
+			if (s.z >= 1.f && s.z <= 1000.0f)
+			{
+				m_DrawItems->$(L"#leader" + Str(P->uuid)).css(
+					{
+						L"enable", L"enable",
+						L"left", Str(s.x + (i - (itr_buf.size() - 1.f) / 2) * size * 100.f),
+						L"top",Str(s.y + size * 135.f),
+						L"width", Str(size * 95.f),
+						L"height",Str(size * 95.f),
+						L"z-index", Str(1 - depth),
+						L"horizontal-align", L"center",
+						L"vertical-align", L"center"
+					}
+				);
+				m_DrawItems->$(L"#leaderflag" + Str(P->uuid)).css(
+					{
+						L"enable", L"enable",
+						L"left", Str(s.x + (i - (itr_buf.size() - 1.f) / 2) * size * 100.f),
+						L"top",Str(s.y + size * 135.f),
+						L"width", Str(size * 95.f),
+						L"height",Str(size * 95.f),
+						L"z-index", Str(1 - depth - 1e-6),
+						L"horizontal-align", L"center",
+						L"vertical-align", L"center"
+					}
+				);
+			}
+			else
+			{
+				m_DrawItems->$(L"#leader" + Str(P->uuid)).css(
+					{
+						L"enable", L"disable",
+						L"left", L"0",
+						L"top", L"0"
+					}
+				);
+				m_DrawItems->$(L"#leaderflag" + Str(P->uuid)).css(
+					{
+						L"enable", L"disable",
+						L"left", L"0",
+						L"top", L"0"
+					}
+				);
+			}
+			++i;
 		}
 
 	}
@@ -1026,7 +1097,31 @@ void MyApp::GameUpdate()
 		}
 	}
 
-
+	for (auto& O : m_DrawItems->data)
+	{
+		if (O.parent > 0)
+		{
+			auto& P = m_DrawItems->withUUID(O.parent);
+			if (P != m_DrawItems->data.end())
+			{
+				O[L"position-left"] = Str(Float((*P)[L"position-left"]) + Float((*P)[L"left"]));
+				O[L"position-top"] = Str(Float((*P)[L"position-top"]) + Float((*P)[L"top"]));
+				O[L"inherit-z-index"] = Str(Float((*P)[L"inherit-z-index"]) + Float((*P)[L"z-index"]));
+			}
+			else
+			{
+				O[L"position-left"] = L"0";
+				O[L"position-top"] = L"0";
+				O[L"inherit-z-index"] = L"0";
+			}
+		}
+		else
+		{
+			O[L"position-left"] = L"0";
+			O[L"position-top"] = L"0";
+			O[L"inherit-z-index"] = L"0";
+		}
+	}
 
 	mEyetarget.m128_f32[0] += mEyeMoveX;
 	mEyetarget.m128_f32[2] += mEyeMoveZ;
@@ -1064,19 +1159,28 @@ void MyApp::ProvinceMousedown(WPARAM btnState, ProvinceId id)
 		{
 			prov->second->ruler = mUser.nationPick;
 		}
-		else
+		else if (prov->second->owner != mUser.nationPick)
 		{
 			prov->second->owner = mUser.nationPick;
 		}
-		return;
+		else
+		{
+			wchar_t buf[256];
+			swprintf_s(buf, LR"(<img id="leader%d" src="Window" enable="disable">)", m_gamedata->leader_progress);
+			m_DrawItems->Insert(buf);
+			if (auto N = m_gamedata->nations.find(prov->second->owner); N == m_gamedata->nations.end())
+				swprintf_s(buf, LR"(<img id="leaderflag%d" src="말갈" enable="disable">)", m_gamedata->leader_progress);
+			else
+				swprintf_s(buf, LR"(<img id="leaderflag%d" src="%ls" enable="disable">)", m_gamedata->leader_progress, N->second->MainName.c_str());
+			m_gamedata->leaders.push_back(std::make_unique<Leader>(m_gamedata->NewLeader(id, prov->second->owner)));
+			m_DrawItems->Insert(buf);
+		}
 	}
-	if (btnState & MK_RBUTTON)
+	else if (btnState & MK_RBUTTON)
 	{
-		prov->second->ruler = mUser.nationPick;
 
-		return;
 	}
-	if (btnState & MK_MBUTTON)
+	else if (btnState & MK_MBUTTON)
 	{
 
 		if (const auto& O = m_gamedata->nations.find(prov->second->owner); O != m_gamedata->nations.end())
@@ -1089,8 +1193,6 @@ void MyApp::ProvinceMousedown(WPARAM btnState, ProvinceId id)
 			mUser.nationPick = 0;
 			captions[L"선택한 국가"] = L"미개인";
 		}
-
-		return;
 	}
 
 }
@@ -1312,7 +1414,9 @@ void MyApp::UILayerInitialize()
 		CreateBrush();
 
 		ThrowIfFailed(m_d2d->d2dDeviceContext->CreateSolidColorBrush(
-			D2D1::ColorF(D2D1::ColorF::Black), &m_d2d->Brush[L"Temp"]));
+			D2D1::ColorF(D2D1::ColorF::Black), &m_d2d->Brush[L"Main"]));
+		ThrowIfFailed(m_d2d->d2dDeviceContext->CreateSolidColorBrush(
+			D2D1::ColorF(D2D1::ColorF::Black), &m_d2d->Brush[L"Back"]));
 
 		ThrowIfFailed(m_d2d->d2dDeviceContext->CreateBitmapBrush(nullptr, m_d2d->BitmapBrush.GetAddressOf()));
 
@@ -1380,62 +1484,12 @@ void MyApp::OnMouseDown(WPARAM btnState, int x, int y)
 	mLastMousePos.x = x;
 	mLastMousePos.y = y;
 
-	for (auto& O = m_DrawItems->data.rbegin(); O != m_DrawItems->data.rend(); ++O)
+	if (auto O = MouseOnUI(x, y); O != m_DrawItems->data.rend())
 	{
-		auto& A = O->Attribute;
-		if (A[L"enable"] == L"disable" || A[L"pointer-events"] == L"none")
-			continue;
-
-		point.x = Float(A[L"left"]);
-		point.y = Float(A[L"top"]);
-
-		size.width = Float(A[L"width"]);
-		size.height = Float(A[L"height"]);
-
-		if (A[L"horizontal-align"] == L"center")
-		{
-			rect.left = point.x - size.width / 2.f;
-			rect.right = point.x + size.width / 2.f;
-		}
-		else if (A[L"horizontal-align"] == L"right")
-		{
-			rect.left = point.x - size.width;
-			rect.right = point.x;
-		}
-		else
-		{
-			rect.left = point.x;
-			rect.right = point.x + size.width;
-		}
-
-		if (A[L"vertical-align"] == L"center")
-		{
-			rect.top = point.y - size.height / 2.f;
-			rect.bottom = point.y + size.height / 2.f;
-		}
-		else if (A[L"vertical-align"] == L"top")
-		{
-			rect.top = point.y - size.height;
-			rect.bottom = point.y;
-		}
-		else
-		{
-			rect.top = point.y;
-			rect.bottom = point.y + size.height;
-		}
-
-		if (rect.left <= x && rect.right >= x &&
-			rect.top <= y && rect.bottom >= y)
-		{
-			focus = O->uuid;
-
-			Execute(A[L"mousedown"], O->uuid);
-
-			SetCapture(mhMainWnd);
-			return;
-		}
+		Execute((*O)[L"mousedown"], O->uuid);
+		focus = O->uuid;
 	}
-
+	else
 	{
 		focus = 0;
 		Pick(btnState, x, y);
@@ -1520,24 +1574,35 @@ void MyApp::Pick(WPARAM btnState, int sx, int sy)
 }
 void MyApp::OnMouseUp(WPARAM btnState, int x, int y)
 {
+	if (auto O = MouseOnUI(x, y); O != m_DrawItems->data.rend())
+	{
+		Execute((*O)[L"mouseup"], O->uuid);
+	}
+
+	ReleaseCapture();
+}
+
+std::list<YTML::DrawItem>::reverse_iterator MyApp::MouseOnUI(int x, int y)
+{
 	for (auto& O = m_DrawItems->data.rbegin(); O != m_DrawItems->data.rend(); ++O)
 	{
-		auto& A = O->Attribute;
-		if (A[L"enable"] == L"disable")
+		if ((*O)[L"enable"] == L"disable")
 			continue;
 
-		point.x = Float(A[L"left"]);
-		point.y = Float(A[L"top"]);
+		point.x = Float((*O)[L"left"]);
+		point.y = Float((*O)[L"top"]);
+		point.x += Float((*O)[L"position-left"]);
+		point.y += Float((*O)[L"position-top"]);
 
-		size.width = Float(A[L"width"]);
-		size.height = Float(A[L"height"]);
+		size.width = Float((*O)[L"width"]);
+		size.height = Float((*O)[L"height"]);
 
-		if (A[L"horizontal-align"] == L"center")
+		if ((*O)[L"horizontal-align"] == L"center")
 		{
 			rect.left = point.x - size.width / 2.f;
 			rect.right = point.x + size.width / 2.f;
 		}
-		else if (A[L"horizontal-align"] == L"right")
+		else if ((*O)[L"horizontal-align"] == L"right")
 		{
 			rect.left = point.x - size.width;
 			rect.right = point.x;
@@ -1548,12 +1613,12 @@ void MyApp::OnMouseUp(WPARAM btnState, int x, int y)
 			rect.right = point.x + size.width;
 		}
 
-		if (A[L"vertical-align"] == L"center")
+		if ((*O)[L"vertical-align"] == L"center")
 		{
 			rect.top = point.y - size.height / 2.f;
 			rect.bottom = point.y + size.height / 2.f;
 		}
-		else if (A[L"vertical-align"] == L"top")
+		else if ((*O)[L"vertical-align"] == L"top")
 		{
 			rect.top = point.y - size.height;
 			rect.bottom = point.y;
@@ -1565,20 +1630,12 @@ void MyApp::OnMouseUp(WPARAM btnState, int x, int y)
 		}
 
 		if (rect.left <= x && rect.right >= x &&
-			rect.top <= y && rect.bottom >= y)
+			rect.top <= y && rect.bottom >= y && (*O)[L"pointer-events"] != L"none")
 		{
-			if (A[L"pointer-events"] == L"none")
-			{
-				continue;
-			}
-			Execute(A[L"mouseup"], O->uuid);
-
-			SetCapture(mhMainWnd);
-			return;
+			return O;
 		}
 	}
-
-	ReleaseCapture();
+	return m_DrawItems->data.rend();
 }
 
 void MyApp::OnMouseMove(WPARAM btnState, int x, int y)
@@ -1746,8 +1803,8 @@ void MyApp::UpdateMainPassCB(const GameTimer& gt)
 	mMainPassCB.DeltaTime = gt.DeltaTime();
 	mMainPassCB.AmbientLight = { 0.f,0.f,0.f,0.f };//{ 0.25f, 0.25f, 0.35f, 1.0f };
 
-	float time = 0.f;// fmodf(mTimer.TotalTime() / 3.f + 0.f, 20.f) - 10.f;
-
+	float time =  fmodf(mTimer.TotalTime() / 3.f + 0.f, 20.f) - 10.f;
+	captions[L"현재 시간"] = Str((int)floorf((time + 10) / 20 * 23 + 1)) + L"시 " + Str((int)(fmodf((time + 10) / 20 * 23 + 1, 1) * 60)) + L"분";
 	mMainPassCB.Lights[0].Direction = { time , -0.57735f, 0.57735f };
 
 

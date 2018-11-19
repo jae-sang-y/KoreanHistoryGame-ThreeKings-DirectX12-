@@ -7,22 +7,60 @@
 
 namespace YTML
 {
+	std::vector<std::wstring> Split(const std::wstring& wstr)
+	{
+		std::vector<std::wstring> _Return;
+		size_t offset = 0;
+		size_t baricade = 0;
+
+		while (offset != std::wstring::npos)
+		{
+			offset = wstr.find(L' ', offset + 1);
+			_Return.push_back(wstr.substr(baricade, offset - baricade));
+			baricade = offset + 1;
+		}
+
+		return _Return;
+	}
+
+	/*template<typename T>
+	std::wstring operator+(std::wstring Tx, T Ty)
+	{
+		return Tx + std::to_wstring(Ty);
+	}
+	template<typename T>
+	std::wstring operator+(T Tx, std::wstring Ty)
+	{
+		return std::to_wstring(Ty) + Tx;
+	}*/
+
 	class DrawItem
 	{
+	private:
+		std::unordered_map<std::wstring, std::wstring> Attribute;
 	public:
 		DrawItem() = default;
-		DrawItem(std::wstring com, std::uint64_t _uuid) : uuid(_uuid)
+		DrawItem(std::wstring com, const std::uint64_t& _uuid, const std::uint64_t& _parent = 0) : uuid(_uuid)
 		{
+			parent = _parent;
+			Attribute[L"inherit-z-index"] = L"0";
 			Attribute[L"z-index"] = L"0";
 
+			Attribute[L"background"] = L"disable";
+			Attribute[L"background-color-r"] = L"1";
+			Attribute[L"background-color-g"] = L"1";
+			Attribute[L"background-color-b"] = L"1";
+			Attribute[L"border"] = L"disable";
 			Attribute[L"color-r"] = L"1";
 			Attribute[L"color-g"] = L"1";
 			Attribute[L"color-b"] = L"1";
-
 			Attribute[L"opacity"] = L"1";
 
 			Attribute[L"left"] = L"0";
 			Attribute[L"top"] = L"0";
+			Attribute[L"position-left"] = L"0";
+			Attribute[L"position-top"] = L"0";
+
 			Attribute[L"width"] = L"64";
 			Attribute[L"height"] = L"64";
 
@@ -81,9 +119,13 @@ namespace YTML
 				//Corrupt
 			}
 		}
-		std::unordered_map<std::wstring, std::wstring> Attribute;
+
+		std::wstring& operator[] (const std::wstring& index) { return Attribute[index]; }
+
+
 		float z_index = 0.f;
 		const std::uint64_t uuid;
+		std::uint64_t parent;
 	};
 	
 	class DrawItemList 
@@ -98,7 +140,7 @@ namespace YTML
 			{
 				try
 				{
-					O.z_index = Float(O.Attribute[L"z-index"]);
+					O.z_index = Float(O[L"z-index"]) + Float(O[L"inherit-z-index"]);
 				}
 				catch (const std::exception&)
 				{
@@ -112,25 +154,184 @@ namespace YTML
 			});
 		}
 
-		void Insert(wchar_t* tag)
+		decltype(data)::iterator Insert(wchar_t* tag, const std::uint64_t& parent = 0)
 		{
-			data.push_back(YTML::DrawItem(tag, ++uuid_progress));
-			
+			data.push_back(YTML::DrawItem(tag, ++uuid_progress, parent));
+			auto _Return = (++data.rbegin()).base();
+
 			Sort();
+
+			return _Return;
 		}
 
-		/*void withClass(const std::wstring& className, std::initializer_list<std::wstring> args)
+		class Query
 		{
-			for (auto& O : data)
-				if (O->Attribute[L"class"] == className)
-					for (size_t i = 0; i < N / 2; ++i)
-						O->Attribute[args[i * 2]] = args[i * 2 + 1];
-		}*/
+		public:
+			std::list<std::list<YTML::DrawItem>::iterator> content;
+			Query css(std::initializer_list<std::wstring> args)
+			{
+				std::wstring head;
+				for (auto P = args.begin();;)
+				{
+					if (P == args.end()) break;
+					head = *(P++);
+					if (P == args.end()) break;
+					for (auto& O : content)
+					{
+						(*O)[head] = *(P++);
+					}
+				}
 
-		std::list<YTML::DrawItem>::iterator withID(const std::wstring& id)
+				return *this;
+			}
+			std::list<std::list<YTML::DrawItem>::iterator>::iterator begin() { return content.begin(); }
+			std::list<std::list<YTML::DrawItem>::iterator>::iterator end() { return content.end(); }
+		};
+		enum class SelectorType
+		{
+			UUID,
+			ID,
+			CLASS
+		};
+		Query $(std::wstring wstr)
+		{
+			Query _Return;
+			auto S = Split(wstr);
+
+			std::list<std::list<YTML::DrawItem>::iterator> buffer;
+			YTML::DrawItemList::SelectorType lastsec = YTML::DrawItemList::SelectorType::UUID;
+
+			if (S.size() > 0)
+			{
+				if (S.at(0).at(0) == L'#')
+				{
+					lastsec = YTML::DrawItemList::SelectorType::ID;
+					S.at(0) = S.at(0).substr(1);
+				}
+				else if (S.at(0).at(0) == L'.')
+				{
+					lastsec = YTML::DrawItemList::SelectorType::CLASS;
+					S.at(0) = S.at(0).substr(1);
+				}
+				else if (S.at(0).at(0) == L'@')
+				{
+					lastsec = YTML::DrawItemList::SelectorType::UUID;
+					S.at(0) = S.at(0).substr(1);
+				}
+				switch (lastsec)
+				{
+				case YTML::DrawItemList::SelectorType::UUID:
+				{
+					std::uint64_t uuid = std::stoull(S.at(0));
+					for (auto O = data.begin(); O != data.end(); ++O)
+						if (O->uuid == uuid)
+						{
+							_Return.content.push_back(O);
+							break;
+						}
+				}
+					break;
+				case YTML::DrawItemList::SelectorType::ID:
+					for (auto O = data.begin(); O != data.end(); ++O)
+						if ((*O)[L"id"] == S.at(0))
+						{
+							_Return.content.push_back(O);
+							break;
+						}
+					break;
+				case YTML::DrawItemList::SelectorType::CLASS:
+					for (auto O = data.begin(); O != data.end(); ++O)
+						if ((*O)[L"class"] == S.at(0))
+						{
+							_Return.content.push_back(O);
+						}
+					break;
+				}
+				for (size_t i = 1; i < S.size(); ++i)
+				{
+					std::swap(buffer, _Return.content);
+					_Return.content.clear();
+
+					if (S.at(i).at(0) == L'#')
+					{
+						lastsec = YTML::DrawItemList::SelectorType::ID;
+						S.at(i) = S.at(i).substr(1);
+					}
+					else if (S.at(i).at(0) == L'.')
+					{
+						lastsec = YTML::DrawItemList::SelectorType::CLASS;
+						S.at(i) = S.at(i).substr(1);
+					}
+					else if (S.at(i).at(0) == L'@')
+					{
+						lastsec = YTML::DrawItemList::SelectorType::UUID;
+						S.at(i) = S.at(i).substr(1);
+					}
+
+					bool hard_break = true;
+					switch (lastsec)
+					{
+					case YTML::DrawItemList::SelectorType::UUID:
+					{
+						std::uint64_t uuid = std::stoull(S.at(i));
+						for (auto O = data.begin(); O != data.end() && hard_break; ++O)
+							if (O->uuid == uuid && O->parent != 0)
+							{
+								for (auto P : buffer)
+								{
+									if (P->uuid == O->parent)
+									{
+										_Return.content.push_back(O);
+										break;
+									}
+								}
+								break;
+							}
+					}
+						break;
+					case YTML::DrawItemList::SelectorType::ID:
+						for (auto O = data.begin(); O != data.end() && hard_break; ++O)
+							if ((*O)[L"id"] == S.at(i) && O->parent != 0)
+							{
+								for (auto P : buffer)
+								{
+									if (P->uuid == O->parent)
+									{
+										_Return.content.push_back(O);
+										hard_break = false;
+										break;
+									}
+								}
+							}
+						break;
+					case YTML::DrawItemList::SelectorType::CLASS:
+						for (auto O = data.begin(); O != data.end() && hard_break; ++O)
+							if ((*O)[L"class"] == S.at(i) && O->parent != 0)
+							{
+								for (auto P : buffer)
+								{
+									if (P->uuid == O->parent)
+									{
+										_Return.content.push_back(O);
+										hard_break = false;
+										break;
+									}
+								}
+							}
+						break;
+					}
+				}
+			}
+
+
+
+			return _Return;
+		}
+
+		/*std::list<YTML::DrawItem>::iterator withID(const std::wstring& id)
 		{
 			for (auto O = data.begin(); O != data.end(); ++O)
-				if (O->Attribute[L"id"] == id)
+				if ((*O)[L"id"] == id)
 				{
 					return O;
 				}
@@ -140,19 +341,19 @@ namespace YTML
 		{
 			std::wstring head;
 			for (auto O = data.begin(); O != data.end(); ++O)
-				if (O->Attribute[L"id"] == id)
+				if ((*O)[L"id"] == id)
 				{
 					for (auto P = args.begin();;)
 					{
 						if (P == args.end()) break;
 						head = *(P++);
 						if (P == args.end()) break;
-						O->Attribute[head] = *(P++);
+						(*O)[head] = *(P++);
 					}
 					return O;
 				}
 			return data.end();
-		}
+		}*/
 
 		std::list<YTML::DrawItem>::iterator withUUID(const std::uint64_t& uuid)
 		{
@@ -174,18 +375,18 @@ namespace YTML
 						if (P == args.end()) break;
 						head = *(P++);
 						if (P == args.end()) break;
-						O->Attribute[head] = *(P++);
+						(*O)[head] = *(P++);
 					}
 					return O;
 				}
 			return data.end();
 		}
-
+		/*
 		std::list<std::list<YTML::DrawItem>::iterator> withClass(const std::wstring& classname)
 		{
 			std::list<std::list<YTML::DrawItem>::iterator> _return;
 			for (auto O = data.begin(); O != data.end(); ++O)
-				if (O->Attribute[L"class"] == classname)
+				if ((*O)[L"class"] == classname)
 				{
 					_return.push_back(O);
 				}
@@ -196,19 +397,19 @@ namespace YTML
 			std::wstring head;
 			std::list<std::list<YTML::DrawItem>::iterator> _return;
 			for (auto O = data.begin(); O != data.end(); ++O)
-				if (O->Attribute[L"class"] == classname)
+				if ((*O)[L"class"] == classname)
 				{
 					for (auto P = args.begin();;)
 					{
 						if (P == args.end()) break;
 						head = *(P++);
 						if (P == args.end()) break;
-						O->Attribute[head] = *(P++);
+						(*O)[head] = *(P++);
 					}
 					_return.push_back(O);
 				}
 			return _return;
-		}
+		}*/
 	};
 
 }
