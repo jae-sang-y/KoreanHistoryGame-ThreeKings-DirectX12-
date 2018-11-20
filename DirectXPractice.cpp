@@ -255,6 +255,8 @@ private:
 			return Leader(loc, own, leader_progress++);
 		}
 	};
+	void Act(std::wstring wstr, std::initializer_list<std::wstring> args);
+
 
 	std::unique_ptr<Data> m_gamedata = std::make_unique<Data>();
 
@@ -430,6 +432,7 @@ void MyApp::BuildImage()
 	loadBitmap(LR"(Images\cursor.png)", L"Cursor");
 	loadBitmap(LR"(Images\form.png)", L"Form");
 	loadBitmap(LR"(Images\window.png)", L"Window");
+	loadBitmap(LR"(Images\button.png)", L"Button");
 	loadBitmap(LR"(Images\flags\말갈.bmp)", L"말갈");
 	wchar_t buf[256];
 	for (const auto& O : m_gamedata->nations)
@@ -864,28 +867,62 @@ void MyApp::GameInit()
 			swprintf_s(buf, LR"(<div id="prov%.0lf" enable="disable" background="enable" opacity="0.5">)", (double)O.first);
 			auto E = m_DrawItems->Insert(buf);
 			swprintf_s(buf, LR"(<a id="provtext%.0lf" enable="disable" opacity="1.0">)", (double)O.first);
-			m_DrawItems->Insert(buf, E->uuid);
+			m_DrawItems->Insert(buf, E);
 		}
 	}
 
 
-	std::uint64_t EM = m_DrawItems->Insert(LR"(<img class="myForm" id="myForm0" src="Form" left="100" top="100" width="200" height="240" mousedown="FormHold" mouseup="FormUnhold" z-index="2">)")->uuid;
-	m_DrawItems->Insert(LR"(<div id="head" src="Window" left="13" top="30" width="174" height="18" z-index="1e-6" border="enable" pointer-events="none">)", EM);
-	m_DrawItems->Insert(LR"(<div id="tail" src="Window" left="13" top="226" width="174" height="12" z-index="1e-6" border="enable">)", EM);
+	std::uint64_t EM = m_DrawItems->Insert(LR"(<img class="myForm" id="myForm0" src="Form" left="100" top="100" width="200" height="240" mousedown="FormHold" mouseup="FormUnhold" z-index="2">)");
+	m_DrawItems->Insert(LR"(<a id="head" text="알 수 없음" left="13" top="30" width="174" height="24" z-index="1e-6" border="enable" pointer-events="none" color-g="0" color-r="0"  color-b="0">)", EM);
+	m_DrawItems->Insert(LR"(<a id="tail" text="영토 확인 메뉴" left="13" top="226" width="174" height="12" z-index="1e-6" border="enable" color-g="0" color-r="0"  color-b="0">)", EM);
 
-	m_DrawItems->Insert(LR"(<div id="flag" src="Window" left="25" top="66" width="62" height="62" z-index="1e-6" color-b="0" color-g="0" border="enable">)", EM);
+	m_DrawItems->Insert(LR"(<img id="flag" src="말갈" left="25" top="66" width="62" height="62" z-index="1e-6" >)", EM);
+	m_DrawItems->Insert(LR"(<img src="Window" left="20" top="62" width="72" height="70" z-index="1e-6">)", EM);
 
-	std::uint64_t EME = m_DrawItems->Insert(LR"(<div src="Window" left="100" top="76" width="80" height="44" z-index="1e-6" color-b="0" color-r="0" border="enable">)", EM)->uuid;
-	m_DrawItems->Insert(LR"(<div id="text0" src="Window" left="0" top="0" width="80" height="16" z-index="1e-6" border="enable" color-g="0">)", EME);
-	m_DrawItems->Insert(LR"(<div id="text1" src="Window" left="0" top="18" width="60" height="12" z-index="1e-6" border="enable" color-g="0">)", EME);
-	m_DrawItems->Insert(LR"(<div id="text2" src="Window" left="0" top="32" width="60" height="12" z-index="1e-6" border="enable" color-g="0">)", EME);
+	std::uint64_t EME = m_DrawItems->Insert(LR"(<div id="textContainer" src="Window" left="100" top="76" width="80" height="44" z-index="1e-6">)", EM);
+	m_DrawItems->Insert(LR"(<a id="text0" text="Window" left="0" top="-4" width="80" height="20" z-index="1e-6" border="enable" color-g="0" color-r="0"  color-b="0">)", EME);
+	m_DrawItems->Insert(LR"(<a id="text1" text="Window" left="0" top="18" width="80" height="12" z-index="1e-6" border="enable" color-g="0" color-r="0"  color-b="0">)", EME);
+	m_DrawItems->Insert(LR"(<a id="text2" text="Window" left="0" top="32" width="80" height="12" z-index="1e-6" border="enable" color-g="0" color-r="0"  color-b="0">)", EME);
 
-	m_DrawItems->Insert(LR"(<div id="buttonbar" src="Window" left="13" top="146" width="174" height="20" z-index="1e-6" border="enable">)", EM);
-
+	std::uint64_t EMEE = m_DrawItems->Insert(LR"(<div id="buttonbar" src="Window" left="13" top="146" width="174" height="20" z-index="1e-6">)", EM);
+	std::uint64_t EMBT = m_DrawItems->Insert(LR"(<img id="button0" src="Button" left="1" top="0" width="56" height="20" z-index="1e-6">)", EMEE);
+	m_DrawItems->Insert(LR"(<a id="text" text="Window" left="0" top="3" width="56" height="15" z-index="1e-6" border="enable" color-g="0" color-r="0"  color-b="0">)", EMBT);
+	EMBT = m_DrawItems->Insert(LR"(<img id="button1" src="Button" left="59" top="0" width="56" height="20" z-index="1e-6">)", EMEE);
+	m_DrawItems->Insert(LR"(<a id="text" text="Window" left="0" top="3" width="56" height="15" z-index="1e-6" border="enable" color-g="0" color-r="0"  color-b="0">)", EMBT);
+	EMBT = m_DrawItems->Insert(LR"(<img id="button2" src="Button" left="117" top="0" width="56" height="20" z-index="1e-6">)", EMEE);
+	m_DrawItems->Insert(LR"(<a id="text" text="Window" left="0" top="3" width="56" height="15" z-index="1e-6" border="enable" color-g="0" color-r="0"  color-b="0">)", EMBT);
 
 	m_DrawItems->Insert(LR"(<img id="myDiv" src="Cursor" z-index="100000" left="0" top="0" width="40" height="40" pointer-events="none">)");
-
 	GameLoad();
+}
+
+void MyApp::Act(std::wstring func_name, std::initializer_list<std::wstring> args)
+{
+	std::unordered_map<std::wstring, std::wstring> arg;
+	std::wstring head;
+	for (auto P = args.begin();;)
+	{
+		if (P == args.end()) break;
+		head = *(P++);
+		if (P == args.end()) break;
+		arg[head] = *(P++);
+	}
+
+	if (func_name == L"Draft")
+	{
+		ProvinceId id = std::stoull(arg[L"location"]);
+		auto prov = m_gamedata->province.find(id);
+
+		wchar_t buf[256];
+		swprintf_s(buf, LR"(<img id="leader%d" src="Window" enable="disable" pointer-events="none" gamedata-leaderid="%d">)", m_gamedata->leader_progress, m_gamedata->leader_progress);
+		std::uint64_t EM = m_DrawItems->Insert(buf);
+		std::wstring nation_name = L"말갈";
+		if (auto N = m_gamedata->nations.find(prov->second->owner); N != m_gamedata->nations.end())
+			nation_name = N->second->MainName;
+		swprintf_s(buf, LR"(<img id="flag" src="%ls" enable="disable" mousedown="SelectLeader">)", nation_name.c_str());
+		m_gamedata->leaders.push_back(std::make_unique<Leader>(m_gamedata->NewLeader(id, prov->second->owner)));
+		m_DrawItems->Insert(buf, EM);
+	}
 }
 
 void MyApp::Execute(const std::wstring& func_name, const std::uint64_t& uuid)
@@ -905,6 +942,59 @@ void MyApp::Execute(const std::wstring& func_name, const std::uint64_t& uuid)
 		{
 			(*O)[L"hold"] = L"0";
 			(*O)[L"z-index"] = L"2";
+		}
+		else if (func_name == L"DraftForP3")
+		{
+			Act(L"Draft", {L"location", (**m_DrawItems->$(Str(uuid) + L" .. .. ..").begin())[L"gamedata-provinceid"]});
+			
+		}
+		else if (func_name == L"SelectLeader")
+		{
+			/*auto P = (**m_DrawItems->$(Str(uuid) + L" .. .. ..").begin());
+			std::wstring nation_name = L"말갈";
+			
+			.abc ..
+
+			m_DrawItems->$(L".myForm").css(
+				{
+					L"gamedata-provinceid", P[L"gamedata-leaderid"]
+				});
+			m_DrawItems->$(L".myForm #flag").css(
+				{
+					L"src", nation_name
+				});
+			m_DrawItems->$(L".myForm #textContainer text0").css(
+				{
+					L"text", nation_name
+				});
+			m_DrawItems->$(L".myForm #textContainer text1").css(
+				{
+					L"text", L"알 수 없음"
+				});
+			m_DrawItems->$(L".myForm #head").css(
+				{
+					L"text", prov->second->name
+				});
+			m_DrawItems->$(L".myForm #textContainer text2").css(
+				{
+					L"text", L"알 수 없음"
+				});
+
+			m_DrawItems->$(L".myForm #buttonbar button0 text").css(
+				{
+					L"text", L"병사 소집",
+					L"mousedown", L""
+				});
+			m_DrawItems->$(L".myForm #buttonbar button1 text").css(
+				{
+					L"text", L"잠김",
+					L"mousedown", L""
+				});
+			m_DrawItems->$(L".myForm #buttonbar button2 text").css(
+				{
+					L"text", L"잠김",
+					L"mousedown", L""
+				});*/
 		}
 	}
 }
@@ -1009,17 +1099,13 @@ void MyApp::GameUpdate()
 		{
 			m_DrawItems->$(L"#prov" + Str(O.first)).css(
 				{
-					L"enable", L"disable",
-					L"left", L"0",
-					L"top", L"0"
+					L"enable", L"disable"
 				}
 			);
 
 			m_DrawItems->$(L"#provtext" + Str(O.first)).css(
 				{
-					L"enable", L"disable",
-					L"left", L"0",
-					L"top", L"0"
+					L"enable", L"disable"
 				}
 			);
 		}
@@ -1050,14 +1136,12 @@ void MyApp::GameUpdate()
 						L"vertical-align", L"center"
 					}
 				);
-				m_DrawItems->$(L"#leaderflag" + Str(P->uuid)).css(
+				m_DrawItems->$(L"#leader" + Str(P->uuid) + L" flag").css(
 					{
 						L"enable", L"enable",
-						L"left", Str(s.x + (i - (itr_buf.size() - 1.f) / 2) * size * 100.f),
-						L"top",Str(s.y + size * 135.f),
-						L"width", Str(size * 95.f),
-						L"height",Str(size * 95.f),
-						L"z-index", Str(1 - depth - 1e-6),
+						L"width", Str(size * 95.f / 32 * 26),
+						L"height",Str(size * 95.f / 32 * 26),
+						L"z-index", Str(0 - depth),
 						L"horizontal-align", L"center",
 						L"vertical-align", L"center"
 					}
@@ -1067,16 +1151,12 @@ void MyApp::GameUpdate()
 			{
 				m_DrawItems->$(L"#leader" + Str(P->uuid)).css(
 					{
-						L"enable", L"disable",
-						L"left", L"0",
-						L"top", L"0"
+						L"enable", L"disable"
 					}
 				);
-				m_DrawItems->$(L"#leaderflag" + Str(P->uuid)).css(
+				m_DrawItems->$(L"#leader" + Str(P->uuid) + L" flag").css(
 					{
-						L"enable", L"disable",
-						L"left", L"0",
-						L"top", L"0"
+						L"enable", L"disable"
 					}
 				);
 			}
@@ -1101,18 +1181,14 @@ void MyApp::GameUpdate()
 	{
 		if (O.parent > 0)
 		{
-			auto& P = m_DrawItems->withUUID(O.parent);
-			if (P != m_DrawItems->data.end())
+			O[L"position-left"] = L"0";
+			O[L"position-top"] = L"0";
+			O[L"inherit-z-index"] = L"0";
+			for (auto P : m_DrawItems->withUUID(O.parent))
 			{
 				O[L"position-left"] = Str(Float((*P)[L"position-left"]) + Float((*P)[L"left"]));
 				O[L"position-top"] = Str(Float((*P)[L"position-top"]) + Float((*P)[L"top"]));
 				O[L"inherit-z-index"] = Str(Float((*P)[L"inherit-z-index"]) + Float((*P)[L"z-index"]));
-			}
-			else
-			{
-				O[L"position-left"] = L"0";
-				O[L"position-top"] = L"0";
-				O[L"inherit-z-index"] = L"0";
 			}
 		}
 		else
@@ -1150,7 +1226,51 @@ void MyApp::ProvinceMousedown(WPARAM btnState, ProvinceId id)
 
 	if (btnState & MK_LBUTTON)
 	{
-		if (prov->second->owner == 0)
+		auto N = m_gamedata->nations.find(prov->second->owner);
+		std::wstring nation_name = N == m_gamedata->nations.end() ? L"말갈" : N->second->MainName;
+
+		m_DrawItems->$(L".myForm").css(
+			{
+				L"gamedata-provinceid", Str(id)
+			});
+		m_DrawItems->$(L".myForm #flag").css(
+		{
+			L"src", nation_name
+		});
+		m_DrawItems->$(L".myForm #textContainer text0").css(
+		{
+			L"text", nation_name
+		});
+		m_DrawItems->$(L".myForm #textContainer text1").css(
+			{
+				L"text", L"알 수 없음"
+			});
+		m_DrawItems->$(L".myForm #head").css(
+			{
+				L"text", prov->second->name
+			});
+		m_DrawItems->$(L".myForm #textContainer text2").css(
+			{
+				L"text", L"알 수 없음"
+			});
+
+		m_DrawItems->$(L".myForm #buttonbar button0 text").css(
+			{
+				L"text", L"병사 소집",
+				L"mousedown", L"DraftForP3"
+			});
+		m_DrawItems->$(L".myForm #buttonbar button1 text").css(
+			{
+				L"text", L"잠김",
+				L"mousedown", L""
+			});
+		m_DrawItems->$(L".myForm #buttonbar button2 text").css(
+			{
+				L"text", L"잠김",
+				L"mousedown", L""
+			});
+
+		/*if (prov->second->owner == 0)
 		{
 			prov->second->ruler = mUser.nationPick;
 			prov->second->owner = mUser.nationPick;
@@ -1174,7 +1294,7 @@ void MyApp::ProvinceMousedown(WPARAM btnState, ProvinceId id)
 				swprintf_s(buf, LR"(<img id="leaderflag%d" src="%ls" enable="disable">)", m_gamedata->leader_progress, N->second->MainName.c_str());
 			m_gamedata->leaders.push_back(std::make_unique<Leader>(m_gamedata->NewLeader(id, prov->second->owner)));
 			m_DrawItems->Insert(buf);
-		}
+		}*/
 	}
 	else if (btnState & MK_RBUTTON)
 	{
@@ -1427,7 +1547,7 @@ void MyApp::UILayerInitialize()
 	ComPtr<IDWriteFontFileLoader> fontFileLoader = nullptr;
 	ComPtr<IDWriteFontCollectionLoader> fontCollLoader = nullptr;
 
-	ThrowIfFailed(AddFontResourceW(L"Resource\\Fonts\\Ruzicka TypeK.ttf"));
+	ThrowIfFailed(AddFontResourceW(LR"(Fonts\EBS주시경M.ttf)"));
 	ThrowIfFailed(m_d2d->dwriteFactory->GetSystemFontCollection(m_d2d->dwFontColl.GetAddressOf(), false))
 
 		//for (UINT32 i = 0U; i < m_d2d->dwFontColl->GetFontFamilyCount(); ++i)
@@ -1803,7 +1923,7 @@ void MyApp::UpdateMainPassCB(const GameTimer& gt)
 	mMainPassCB.DeltaTime = gt.DeltaTime();
 	mMainPassCB.AmbientLight = { 0.f,0.f,0.f,0.f };//{ 0.25f, 0.25f, 0.35f, 1.0f };
 
-	float time =  fmodf(mTimer.TotalTime() / 3.f + 0.f, 20.f) - 10.f;
+	float time = 0;// fmodf(mTimer.TotalTime() / 3.f + 0.f, 20.f) - 10.f;
 	captions[L"현재 시간"] = Str((int)floorf((time + 10) / 20 * 23 + 1)) + L"시 " + Str((int)(fmodf((time + 10) / 20 * 23 + 1, 1) * 60)) + L"분";
 	mMainPassCB.Lights[0].Direction = { time , -0.57735f, 0.57735f };
 

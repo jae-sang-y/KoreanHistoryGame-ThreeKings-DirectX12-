@@ -154,15 +154,6 @@ namespace YTML
 			});
 		}
 
-		decltype(data)::iterator Insert(wchar_t* tag, const std::uint64_t& parent = 0)
-		{
-			data.push_back(YTML::DrawItem(tag, ++uuid_progress, parent));
-			auto _Return = (++data.rbegin()).base();
-
-			Sort();
-
-			return _Return;
-		}
 
 		class Query
 		{
@@ -186,6 +177,10 @@ namespace YTML
 			}
 			std::list<std::list<YTML::DrawItem>::iterator>::iterator begin() { return content.begin(); }
 			std::list<std::list<YTML::DrawItem>::iterator>::iterator end() { return content.end(); }
+			operator std::uint64_t() {
+				
+				return content.size() > 0 ? (*content.begin())->uuid : 0;
+			}
 		};
 		enum class SelectorType
 		{
@@ -305,19 +300,37 @@ namespace YTML
 							}
 						break;
 					case YTML::DrawItemList::SelectorType::CLASS:
-						for (auto O = data.begin(); O != data.end() && hard_break; ++O)
-							if ((*O)[L"class"] == S.at(i) && O->parent != 0)
+						if (S.at(i) == L".")
+						{
+							for (auto P : buffer)
 							{
-								for (auto P : buffer)
-								{
-									if (P->uuid == O->parent)
+								hard_break = true;
+								if (P->parent > 0)
+									for (auto O : withUUID(P->parent))
 									{
 										_Return.content.push_back(O);
 										hard_break = false;
-										break;
+									}
+								if (hard_break)
+									_Return.content.push_back(P);
+							}
+						}
+						else
+						{
+							for (auto O = data.begin(); O != data.end() && hard_break; ++O)
+								if ((*O)[L"class"] == S.at(i) && O->parent != 0)
+								{
+									for (auto P : buffer)
+									{
+										if (P->uuid == O->parent)
+										{
+											_Return.content.push_back(O);
+											hard_break = false;
+											break;
+										}
 									}
 								}
-							}
+						}
 						break;
 					}
 				}
@@ -328,44 +341,29 @@ namespace YTML
 			return _Return;
 		}
 
-		/*std::list<YTML::DrawItem>::iterator withID(const std::wstring& id)
+		Query Insert(wchar_t* tag, const std::uint64_t& parent = 0)
 		{
-			for (auto O = data.begin(); O != data.end(); ++O)
-				if ((*O)[L"id"] == id)
-				{
-					return O;
-				}
-			return data.end();
+			Query _Return;
+			data.push_back(YTML::DrawItem(tag, ++uuid_progress, parent));
+			_Return.content.push_back((++data.rbegin()).base());
+			Sort();
+			return _Return;
 		}
-		std::list<YTML::DrawItem>::iterator withID(const std::wstring& id, std::initializer_list<std::wstring> args)
-		{
-			std::wstring head;
-			for (auto O = data.begin(); O != data.end(); ++O)
-				if ((*O)[L"id"] == id)
-				{
-					for (auto P = args.begin();;)
-					{
-						if (P == args.end()) break;
-						head = *(P++);
-						if (P == args.end()) break;
-						(*O)[head] = *(P++);
-					}
-					return O;
-				}
-			return data.end();
-		}*/
 
-		std::list<YTML::DrawItem>::iterator withUUID(const std::uint64_t& uuid)
+		Query withUUID(const std::uint64_t& uuid)
 		{
+			Query _Return;
 			for (auto O = data.begin(); O != data.end(); ++O)
 				if (O->uuid == uuid)
 				{
-					return O;
+					_Return.content.push_back(O);
+					break;
 				}
-			return data.end();
+			return _Return;
 		}
-		std::list<YTML::DrawItem>::iterator withUUID(const std::uint64_t& uuid, std::initializer_list<std::wstring> args)
+		Query withUUID(const std::uint64_t& uuid, std::initializer_list<std::wstring> args)
 		{
+			Query _Return;
 			std::wstring head;
 			for (auto O = data.begin(); O != data.end(); ++O)
 				if (O->uuid == uuid)
@@ -377,39 +375,12 @@ namespace YTML
 						if (P == args.end()) break;
 						(*O)[head] = *(P++);
 					}
-					return O;
+					_Return.content.push_back(O);
+					break;
 				}
-			return data.end();
+			return _Return;
 		}
-		/*
-		std::list<std::list<YTML::DrawItem>::iterator> withClass(const std::wstring& classname)
-		{
-			std::list<std::list<YTML::DrawItem>::iterator> _return;
-			for (auto O = data.begin(); O != data.end(); ++O)
-				if ((*O)[L"class"] == classname)
-				{
-					_return.push_back(O);
-				}
-			return _return;
-		}
-		std::list<std::list<YTML::DrawItem>::iterator> withClass(const std::wstring& classname, std::initializer_list<std::wstring> args)
-		{
-			std::wstring head;
-			std::list<std::list<YTML::DrawItem>::iterator> _return;
-			for (auto O = data.begin(); O != data.end(); ++O)
-				if ((*O)[L"class"] == classname)
-				{
-					for (auto P = args.begin();;)
-					{
-						if (P == args.end()) break;
-						head = *(P++);
-						if (P == args.end()) break;
-						(*O)[head] = *(P++);
-					}
-					_return.push_back(O);
-				}
-			return _return;
-		}*/
+		
 	};
 
 }
