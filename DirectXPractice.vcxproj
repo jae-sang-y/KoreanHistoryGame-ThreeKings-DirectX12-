@@ -203,6 +203,7 @@
   <ItemGroup>
     <Image Include="Map\map.bmp" />
     <Image Include="Map\prov.bmp" />
+    <Image Include="Textures\Arrow.dds" />
     <Image Include="Textures\water1.dds" />
   </ItemGroup>
   <ItemGroup>

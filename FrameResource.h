@@ -6,6 +6,7 @@
 
 
 using ProvinceId = std::uint64_t;
+using LeaderId = std::uint64_t;
 using NationId = std::uint64_t;
 using Color32 = std::uint32_t;
 
@@ -71,7 +72,7 @@ struct FrameResource
 {
 public:
     
-    FrameResource(ID3D12Device* device, UINT passCount, UINT objectCount, UINT materialCount, UINT waveVertCount);
+    FrameResource(ID3D12Device* device, UINT passCount, UINT objectCount, UINT materialCount, UINT waveVertCount, UINT arrowVertCount);
     FrameResource(const FrameResource& rhs) = delete;
     FrameResource& operator=(const FrameResource& rhs) = delete;
     ~FrameResource();
@@ -90,7 +91,9 @@ public:
     // We cannot update a dynamic vertex buffer until the GPU is done processing
     // the commands that reference it.  So each frame needs their own.
     std::unique_ptr<UploadBuffer<Vertex>> WavesVB = nullptr;
+	std::unique_ptr<UploadBuffer<std::uint16_t>> WavesIB = nullptr;
 	std::unique_ptr<UploadBuffer<Vertex>> GndVB = nullptr;
+
 
     // Fence value to mark commands up to this fence point.  This lets us
     // check if these frame resources are still in use by the GPU.

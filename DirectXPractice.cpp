@@ -91,6 +91,96 @@ void dex2rgb(unsigned int& r, unsigned int& g, unsigned int& b, const Color32& d
 	b = (dex & 255);
 }
 
+class Arrows
+{
+public:
+	std::vector<Vertex> vertices;
+	std::vector<std::uint16_t> indices;
+	Arrows()
+	{
+		std::vector<XMFLOAT2> points;
+		for (float i = 5; i <= 60; i += 0.5)
+		{
+			points.push_back(XMFLOAT2(0.4f*cosf(i) * i, 0.4f*sinf(i) * i));
+		}
+
+		float width2 = 1.f;
+		for (int i = 0; i < points.size(); ++i)
+		{
+			if (i > 0 && i < points.size() - 1)
+			{
+				auto V0 = XMLoadFloat2(new XMFLOAT2(points[i].x - points[i - 1].x, points[i].y - points[i - 1].y));
+				auto V1 = XMLoadFloat2(new XMFLOAT2(points[i].x - points[i + 1].x, points[i].y - points[i + 1].y));
+
+
+				V0 = XMVector2Normalize(V0);
+				V1 = XMVector2Normalize(V1);
+
+				if (XMVector2Equal(V0 + V1, XMLoadFloat2(new XMFLOAT2(0, 0))))
+				{
+					V0 = XMVector2Orthogonal(V0);
+				}
+				else
+				{
+					V0 += V1;
+				}
+
+				//V0 = XMVector2Orthogonal(V0);
+				V0 = XMVector2Normalize(V0);
+
+				XMFLOAT2 F;
+				XMStoreFloat2(&F, V0);
+
+
+				vertices.push_back({ XMFLOAT3(points[i].x - width2 * F.x,1.f, points[i].y - width2 * F.y) ,XMFLOAT3(0,1,0), XMFLOAT2(0, 1) });
+				vertices.push_back({ XMFLOAT3(points[i].x + width2 * F.x,1.f, points[i].y + width2 * F.y) ,XMFLOAT3(0,1,0), XMFLOAT2(1, 1) });
+
+			}
+			else if (i == 0)
+			{
+				auto V = XMLoadFloat2(new XMFLOAT2(points[i + 1].x - points[i].x, points[i + 1].y - points[i].y));
+				V = XMVector2Orthogonal(V);
+				V = XMVector2Normalize(V);
+				XMFLOAT2 F;
+				XMStoreFloat2(&F, V);
+
+				vertices.push_back({ XMFLOAT3(points[i].x + width2 * F.x,1.f, points[i].y + width2 * F.y) ,XMFLOAT3(0,1,0), XMFLOAT2(0, 1) });
+				vertices.push_back({ XMFLOAT3(points[i].x - width2 * F.x,1.f, points[i].y - width2 * F.y) ,XMFLOAT3(0,1,0), XMFLOAT2(1, 1) });
+			}
+			else
+			{
+				auto V = XMLoadFloat2(new XMFLOAT2(points[i].x - points[i - 1].x, points[i].y - points[i - 1].y));
+				V = XMVector2Orthogonal(V);
+				V = XMVector2Normalize(V);
+				XMFLOAT2 F;
+				XMStoreFloat2(&F, V);
+				
+				vertices.push_back({ XMFLOAT3(points[i].x + width2 * F.x,-1.f, points[i].y + width2 * F.y) ,XMFLOAT3(0,1,0), XMFLOAT2(0, 0) });
+				vertices.push_back({ XMFLOAT3(points[i].x - width2 * F.x,-1.f, points[i].y - width2 * F.y) ,XMFLOAT3(0,1,0), XMFLOAT2(1, 0) });
+			}
+
+		}
+
+		for (std::uint16_t i = 0; i < points.size() - 1; ++i)
+		{
+			indices.push_back(i * 2);
+			indices.push_back(i * 2 + 1);
+			indices.push_back(i * 2 + 3);
+			indices.push_back(i * 2 + 3);
+			indices.push_back(i * 2 + 1);
+			indices.push_back(i * 2);
+			indices.push_back(i * 2);
+			indices.push_back(i * 2 + 3);
+			indices.push_back(i * 2 + 2);
+			indices.push_back(i * 2 + 2);
+			indices.push_back(i * 2 + 3);
+			indices.push_back(i * 2);
+
+		}
+
+	}
+};
+
 class MyApp : public D3DApp
 {
 public:
@@ -128,12 +218,14 @@ private:
 	void BuildShadersAndInputLayout();
 	void BuildLandGeometry();
 	void BuildWavesGeometry();
+	void BuildArrowGeometry();
 	void BuildBoxGeometry();
 	void BuildPSOs();
 	void BuildFrameResources();
 	void BuildMaterials();
 	void BuildRenderItems();
 	void BuildImage();
+	void BuildProvinceConnect();
 	void DrawRenderItems(ID3D12GraphicsCommandList* cmdList, const std::vector<RenderItem*>& ritems);
 	void Pick(WPARAM btnState, int sx, int sy);
 	void LoadSizeDependentResources();
@@ -152,8 +244,13 @@ private:
 
 	void Query(const std::wstring& query);
 	void Execute(const std::wstring& func_name, const std::uint64_t& uuid);
+
+
 	std::list<YTML::DrawItem>::reverse_iterator MyApp::MouseOnUI(int x, int y);
 private:
+	LeaderId last_leader_id = 0;
+	void GUIUpdatePanelLeader(LeaderId leader_id);
+	void GUIUpdatePanelProvince(ProvinceId prov_id);
 
 	UINT mCbvSrvDescriptorSize = 0;
 
@@ -199,6 +296,8 @@ private:
 	float mX = 0;
 
 	POINT mLastMousePos;
+	Arrows mArrows;
+
 
 	struct {
 		std::wstring DebugText = L"선택 되지 않음";
@@ -233,28 +332,129 @@ private:
 		XMFLOAT4 MainColor = { 0.f, 0.f, 0.f, 0.f };
 		std::wstring MainName = L"오류";
 	};
+	enum class CommandType
+	{
+		Move
+	};
+	struct Command
+	{
+		const CommandType type;
+		const ProvinceId target_prov;
+		const LeaderId target_leader;
+		Command(const CommandType _type, const ProvinceId prov = 0, const LeaderId leader = 0) : type(_type), target_prov(prov), target_leader(leader) {}
+	};
+
 	struct Leader
 	{
+		std::list<Command> cmd;
 		bool enable = true;
 		ProvinceId location;
-		const std::uint64_t uuid;
 		bool selected = false;
 		NationId owner;
-		Leader(const ProvinceId& loc, const NationId own, const std::uint64_t _uuid) : location(loc), uuid(_uuid), owner(own) {};
+		Leader(const ProvinceId& loc, const NationId own) : location(loc), owner(own) {};
 	};
 
 	struct Data
 	{
 		std::map<ProvinceId, std::unique_ptr<Province>> province;
+		std::map<std::pair<ProvinceId, ProvinceId>, float> province_connect;
 		std::unordered_map<NationId, std::unique_ptr<Nation>>  nations;
 
-		std::list<std::shared_ptr<Leader>> leaders;
-		std::uint64_t leader_progress = 0;
+		std::unordered_map<LeaderId, std::shared_ptr<Leader>> leaders;
+		std::uint64_t leader_progress = 1;
 		Leader NewLeader(const ProvinceId& loc, const NationId own)
 		{
-			return Leader(loc, own, leader_progress++);
+			return Leader(loc, own);
 		}
 	};
+	enum class ProvincePathOutState {
+		NotOut,
+		WaitOut,
+		Out
+	};
+	struct ProvincePathNode
+	{
+		float Length = FLT_MAX;
+		ProvinceId Nearest = 0;
+		ProvincePathOutState Out = ProvincePathOutState::NotOut;
+	};
+	struct ProvincePath
+	{
+		std::list<ProvinceId> path;
+		std::map<ProvinceId, ProvincePathNode> prv;
+		decltype(path)::iterator begin() { return path.begin(); }
+		decltype(path)::iterator end() { return path.end(); }
+
+		ProvincePath(const std::map<ProvinceId, std::unique_ptr<Province>>&  _prv, const std::map<std::pair<ProvinceId, ProvinceId>, float> conn, const ProvinceId& Start, const ProvinceId& End)
+		{
+			if (Start == End) return;
+			for (const auto& O : _prv) prv[O.first] = ProvincePathNode();
+
+			prv.at(End).Length = 0;
+			prv.at(End).Out = ProvincePathOutState::WaitOut;
+
+			size_t limit = 0;
+			while (limit++ <= prv.size())
+			{
+				for (auto& O : prv)
+				{
+					if (O.second.Out == ProvincePathOutState::WaitOut)
+					{
+						for (auto& P : prv)
+						{
+							if (P.second.Out == ProvincePathOutState::NotOut)
+							{
+								if (auto Q = conn.find(std::make_pair(O.first, P.first)); Q != conn.end())
+								{
+									if (P.second.Length > O.second.Length + Q->second)
+									{
+										P.second.Length = O.second.Length + Q->second;
+										P.second.Nearest = O.first;
+									}
+								}
+							}
+						}
+						O.second.Out = ProvincePathOutState::Out;
+					}
+				}
+
+				/*if (prv.at(Start).Out == ProvincePathOutState::Out)
+				{
+					break;
+				}*/
+
+				float meter = FLT_MAX;
+				decltype(prv)::iterator itr = prv.end();
+				for (auto O = prv.begin(); O != prv.end(); ++O)
+				{
+					if (O->second.Out == ProvincePathOutState::NotOut && meter > O->second.Length)
+					{
+						meter = O->second.Length;
+						itr = O;
+					}
+				}
+				if (itr != prv.end())
+				{
+					itr->second.Out = ProvincePathOutState::WaitOut;
+				}
+				else
+				{
+					break;
+				}
+			}
+			
+			if (prv.at(Start).Out != ProvincePathOutState::NotOut)
+			{
+				ProvinceId Index = Start;
+				do
+				{
+ 					Index = prv.at(Index).Nearest;
+					path.push_back(Index);
+				} while (Index != End);
+			}
+		}
+	};
+
 	void Act(std::wstring wstr, std::initializer_list<std::wstring> args);
 
 
@@ -286,14 +486,15 @@ private:
 		std::wstring index;
 
 		ProvinceId tag_prov;
+		LeaderId tag_leader;
 		decltype(Data::province)::iterator tag_prov_it;
 
 	} mQuery;
 
-	D2D1_POINT_2F point;
-	D2D1_RECT_F rect;
-	D2D1_SIZE_F size;
-	D2D1_SIZE_F scale;
+	D2D1_POINT_2F Draw_point;
+	D2D1_RECT_F Draw_rect;
+	D2D1_SIZE_F Draw_size;
+	D2D1_SIZE_F Draw_scale;
 
 	std::uint64_t focus = 0;
 };
@@ -355,6 +556,7 @@ bool MyApp::Initialize()
 	BuildShadersAndInputLayout();
 	BuildLandGeometry();
 	BuildWavesGeometry();
+	BuildArrowGeometry();
 	BuildBoxGeometry();
 	BuildMaterials();
 	BuildRenderItems();
@@ -384,6 +586,52 @@ void MyApp::OnResize()
 	// The window resized, so update the aspect ratio and recompute the projection matrix.
 	XMMATRIX P = XMMatrixPerspectiveFovLH(0.25f*MathHelper::Pi, AspectRatio(), 1.0f, 1000.0f);
 	XMStoreFloat4x4(&mProj, P);
+}
+
+
+void MyApp::Update(const GameTimer& gt)
+{
+	OnKeyboardInput(gt);
+	UpdateCamera(gt);
+
+	// Cycle through the circular frame resource array.
+	mCurrFrameResourceIndex = (mCurrFrameResourceIndex + 1) % gNumFrameResources;
+	mCurrFrameResource = mFrameResources[mCurrFrameResourceIndex].get();
+
+	// Has the GPU finished processing the commands of the current frame resource?
+	// If not, wait until the GPU has completed commands up to this fence point.
+	if (mCurrFrameResource->Fence != 0 && mFence->GetCompletedValue() < mCurrFrameResource->Fence)
+	{
+		HANDLE eventHandle = CreateEventEx(nullptr, false, false, EVENT_ALL_ACCESS);
+		ThrowIfFailed(mFence->SetEventOnCompletion(mCurrFrameResource->Fence, eventHandle));
+		WaitForSingleObject(eventHandle, INFINITE);
+		CloseHandle(eventHandle);
+	}
+
+	AnimateMaterials(gt);
+	UpdateObjectCBs(gt);
+	UpdateMaterialCBs(gt);
+	UpdateMainPassCB(gt);
+	UpdateWaves(gt);
+	LoadSizeDependentResources();
+	GameUpdate();
+}
+
+const XMFLOAT3 MyApp::Convert3Dto2D(FXMVECTOR pos)
+{
+	XMVECTOR _pos = XMVector3Transform(pos, XMLoadFloat4x4(&mView));
+	_pos = XMVector3Transform(_pos, XMLoadFloat4x4(&mProj));
+
+	XMFLOAT3 newPos;
+	DirectX::XMStoreFloat3(&newPos, _pos);
+
+	newPos.x /= newPos.z;
+	newPos.y /= newPos.z;
+
+	newPos.x = mClientWidth * (newPos.x + 1.0f) / 2.0f;
+	newPos.y = mClientHeight * (1.0f - ((newPos.y + 1.0f) / 2.0f));
+
+	return newPos;
 }
 
 void MyApp::BuildImage()
@@ -432,6 +680,7 @@ void MyApp::BuildImage()
 	loadBitmap(LR"(Images\cursor.png)", L"Cursor");
 	loadBitmap(LR"(Images\form.png)", L"Form");
 	loadBitmap(LR"(Images\window.png)", L"Window");
+	loadBitmap(LR"(Images\window-highlight.png)", L"WindowHighlight");
 	loadBitmap(LR"(Images\button.png)", L"Button");
 	loadBitmap(LR"(Images\flags\말갈.bmp)", L"말갈");
 	wchar_t buf[256];
@@ -442,52 +691,6 @@ void MyApp::BuildImage()
 
 	}
 }
-
-void MyApp::Update(const GameTimer& gt)
-{
-	OnKeyboardInput(gt);
-	UpdateCamera(gt);
-
-	// Cycle through the circular frame resource array.
-	mCurrFrameResourceIndex = (mCurrFrameResourceIndex + 1) % gNumFrameResources;
-	mCurrFrameResource = mFrameResources[mCurrFrameResourceIndex].get();
-
-	// Has the GPU finished processing the commands of the current frame resource?
-	// If not, wait until the GPU has completed commands up to this fence point.
-	if (mCurrFrameResource->Fence != 0 && mFence->GetCompletedValue() < mCurrFrameResource->Fence)
-	{
-		HANDLE eventHandle = CreateEventEx(nullptr, false, false, EVENT_ALL_ACCESS);
-		ThrowIfFailed(mFence->SetEventOnCompletion(mCurrFrameResource->Fence, eventHandle));
-		WaitForSingleObject(eventHandle, INFINITE);
-		CloseHandle(eventHandle);
-	}
-
-	AnimateMaterials(gt);
-	UpdateObjectCBs(gt);
-	UpdateMaterialCBs(gt);
-	UpdateMainPassCB(gt);
-	UpdateWaves(gt);
-	LoadSizeDependentResources();
-	GameUpdate();
-}
-
-const XMFLOAT3 MyApp::Convert3Dto2D(FXMVECTOR pos)
-{
-	XMVECTOR _pos = XMVector3Transform(pos, XMLoadFloat4x4(&mView));
-	_pos = XMVector3Transform(_pos, XMLoadFloat4x4(&mProj));
-
-	XMFLOAT3 newPos;
-	XMStoreFloat3(&newPos, _pos);
-
-	newPos.x /= newPos.z;
-	newPos.y /= newPos.z;
-
-	newPos.x = mClientWidth * (newPos.x + 1.0f) / 2.0f;
-	newPos.y = mClientHeight * (1.0f - ((newPos.y + 1.0f) / 2.0f));
-
-	return newPos;
-}
-
 void MyApp::DrawUI()
 {
 	auto& g = m_d2d->d2dDeviceContext;
@@ -512,53 +715,53 @@ void MyApp::DrawUI()
 			m_d2d->Brush[L"Back"]->SetColor(D2D1::ColorF(Float(O[L"background-color-r"]), Float(O[L"background-color-g"]), Float(O[L"background-color-b"])));
 			m_d2d->Brush[L"Back"]->SetOpacity(Float(O[L"opacity"]));
 
-			point.x = Float(O[L"left"]);
-			point.y = Float(O[L"top"]);
-			point.x += Float(O[L"position-left"]);
-			point.y += Float(O[L"position-top"]);
+			Draw_point.x = Float(O[L"left"]);
+			Draw_point.y = Float(O[L"top"]);
+			Draw_point.x += Float(O[L"position-left"]);
+			Draw_point.y += Float(O[L"position-top"]);
 
-			size.width = Float(O[L"width"]);
-			size.height = Float(O[L"height"]);
+			Draw_size.width = Float(O[L"width"]);
+			Draw_size.height = Float(O[L"height"]);
 
 			if (O[L"horizontal-align"] == L"center")
 			{
-				rect.left = point.x - size.width / 2.f;
-				rect.right = point.x + size.width / 2.f;
+				Draw_rect.left = Draw_point.x - Draw_size.width / 2.f;
+				Draw_rect.right = Draw_point.x + Draw_size.width / 2.f;
 			}
 			else if (O[L"horizontal-align"] == L"right")
 			{
-				rect.left = point.x - size.width;
-				rect.right = point.x;
+				Draw_rect.left = Draw_point.x - Draw_size.width;
+				Draw_rect.right = Draw_point.x;
 			}
 			else
 			{
-				rect.left = point.x;
-				rect.right = point.x + size.width;
+				Draw_rect.left = Draw_point.x;
+				Draw_rect.right = Draw_point.x + Draw_size.width;
 			}
 
 			if (O[L"vertical-align"] == L"center")
 			{
-				rect.top = point.y - size.height / 2.f;
-				rect.bottom = point.y + size.height / 2.f;
+				Draw_rect.top = Draw_point.y - Draw_size.height / 2.f;
+				Draw_rect.bottom = Draw_point.y + Draw_size.height / 2.f;
 			}
 			else if (O[L"vertical-align"] == L"top")
 			{
-				rect.top = point.y - size.height;
-				rect.bottom = point.y;
+				Draw_rect.top = Draw_point.y - Draw_size.height;
+				Draw_rect.bottom = Draw_point.y;
 			}
 			else
 			{
-				rect.top = point.y;
-				rect.bottom = point.y + size.height;
+				Draw_rect.top = Draw_point.y;
+				Draw_rect.bottom = Draw_point.y + Draw_size.height;
 			}
 
 
 			if (O[L"tag"] == L"div")
 			{
 				if (O[L"background"] == L"enable")
-					g->FillRectangle(rect, m_d2d->Brush[L"Back"].Get());
+					g->FillRectangle(Draw_rect, m_d2d->Brush[L"Back"].Get());
 				if (O[L"border"] == L"enable")
-					g->DrawRectangle(rect, m_d2d->Brush[L"Main"].Get());
+					g->DrawRectangle(Draw_rect, m_d2d->Brush[L"Main"].Get());
 				//OutputDebugStringW(((O[L"left"]) + L" : " + (O[L"top"]) + L"\n").c_str());
 			}
 			else if (O[L"tag"] == L"a")
@@ -567,12 +770,12 @@ void MyApp::DrawUI()
 				ThrowIfFailed(m_d2d->dwriteFactory->CreateTextLayout(
 					O[L"text"].c_str(), (UINT32)O[L"text"].length(),
 					m_d2d->textFormat[L"Above Province"].Get(),
-					size.width, size.height,
+					Draw_size.width, Draw_size.height,
 					m_d2d->textLayout.GetAddressOf()
 				));
-				m_d2d->textLayout->SetFontSize(size.height * 0.8f, { 0U,  (UINT32)O[L"text"].length() });
+				m_d2d->textLayout->SetFontSize(Draw_size.height * 0.8f, { 0U,  (UINT32)O[L"text"].length() });
 
-				g->DrawTextLayout(D2D1::Point2F(rect.left, rect.top), m_d2d->textLayout.Get(),
+				g->DrawTextLayout(D2D1::Point2F(Draw_rect.left, Draw_rect.top), m_d2d->textLayout.Get(),
 					m_d2d->Brush[L"Main"].Get(), D2D1_DRAW_TEXT_OPTIONS_CLIP
 				);
 			}
@@ -581,15 +784,15 @@ void MyApp::DrawUI()
 				auto& B = m_d2d->pD2DBitmap[O[L"src"]];
 				m_d2d->BitmapBrush->SetBitmap(B.data.Get());
 
-				scale.width = (rect.right - rect.left) / B.width;
-				scale.height = (rect.bottom - rect.top) / B.height;
+				Draw_scale.width = (Draw_rect.right - Draw_rect.left) / B.width;
+				Draw_scale.height = (Draw_rect.bottom - Draw_rect.top) / B.height;
 
 				m_d2d->BitmapBrush->SetTransform(
-					D2D1::Matrix3x2F::Translation(rect.left / scale.width, rect.top / scale.height) *
-					D2D1::Matrix3x2F::Scale(scale.width, scale.height)
+					D2D1::Matrix3x2F::Translation(Draw_rect.left / Draw_scale.width, Draw_rect.top / Draw_scale.height) *
+					D2D1::Matrix3x2F::Scale(Draw_scale.width, Draw_scale.height)
 				);
 				//g->FillRectangle(rect, m_d2d->Brush[L"White"].Get());
-				g->FillRectangle(rect, m_d2d->BitmapBrush.Get());
+				g->FillRectangle(Draw_rect, m_d2d->BitmapBrush.Get());
 			}
 		}
 		catch (const std::exception&)
@@ -634,10 +837,7 @@ void MyApp::Draw(const GameTimer& gt)
 	mCommandList->SetGraphicsRootConstantBufferView(2, passCB->GetGPUVirtualAddress());
 
 	DrawRenderItems(mCommandList.Get(), mRitemLayer[(int)RenderLayer::Opaque]);
-
-	mCommandList->SetPipelineState(mPSOs["alphaTested"].Get());
-	DrawRenderItems(mCommandList.Get(), mRitemLayer[(int)RenderLayer::AlphaTested]);
-
+	
 	mCommandList->SetPipelineState(mPSOs["province"].Get());
 	DrawRenderItems(mCommandList.Get(), mRitemLayer[(int)RenderLayer::Province]);
 
@@ -871,7 +1071,7 @@ void MyApp::GameInit()
 		}
 	}
 
-
+	
 	std::uint64_t EM = m_DrawItems->Insert(LR"(<img class="myForm" id="myForm0" src="Form" left="100" top="100" width="200" height="240" mousedown="FormHold" mouseup="FormUnhold" z-index="2">)");
 	m_DrawItems->Insert(LR"(<a id="head" text="알 수 없음" left="13" top="30" width="174" height="24" z-index="1e-6" border="enable" pointer-events="none" color-g="0" color-r="0"  color-b="0">)", EM);
 	m_DrawItems->Insert(LR"(<a id="tail" text="영토 확인 메뉴" left="13" top="226" width="174" height="12" z-index="1e-6" border="enable" color-g="0" color-r="0"  color-b="0">)", EM);
@@ -914,25 +1114,162 @@ void MyApp::Act(std::wstring func_name, std::initializer_list<std::wstring> args
 		auto prov = m_gamedata->province.find(id);
 
 		wchar_t buf[256];
-		swprintf_s(buf, LR"(<img id="leader%d" src="Window" enable="disable" pointer-events="none" gamedata-leaderid="%d">)", m_gamedata->leader_progress, m_gamedata->leader_progress);
+		swprintf_s(buf, LR"(<img id="leader%llu" src="Window" enable="disable" pointer-events="none" gamedata-leaderid="%llu">)", m_gamedata->leader_progress, m_gamedata->leader_progress);
 		std::uint64_t EM = m_DrawItems->Insert(buf);
 		std::wstring nation_name = L"말갈";
 		if (auto N = m_gamedata->nations.find(prov->second->owner); N != m_gamedata->nations.end())
 			nation_name = N->second->MainName;
 		swprintf_s(buf, LR"(<img id="flag" src="%ls" enable="disable" mousedown="SelectLeader">)", nation_name.c_str());
-		m_gamedata->leaders.push_back(std::make_unique<Leader>(m_gamedata->NewLeader(id, prov->second->owner)));
+		m_gamedata->leaders.insert(std::make_pair(m_gamedata->leader_progress++, std::make_unique<Leader>(m_gamedata->NewLeader(id, prov->second->owner))));
 		m_DrawItems->Insert(buf, EM);
 	}
+}
+
+void MyApp::GUIUpdatePanelLeader(LeaderId leader_id = 0)
+{
+	if (leader_id == 0)
+		leader_id = last_leader_id;
+	else
+		last_leader_id = leader_id;
+	std::wstring nation_name = L"알 수 없음";
+	std::wstring present_com = L"알 수 없음";
+	std::wstring progress = L"알 수 없음";
+	LeaderId leader = leader_id;
+	if (auto Q = m_gamedata->leaders.find(leader); Q != m_gamedata->leaders.end())
+	{
+		if (Q->second->selected)
+		{
+			if (Q->second->cmd.size() > 0)
+			{
+				auto R = Q->second->cmd.cbegin();
+				if (R->type == CommandType::Move)
+				{
+					present_com = m_gamedata->province.at(R->target_prov)->name + L"로 이동중";
+					progress = Str((int)m_gamedata->province_connect.at(std::make_pair(Q->second->location, R->target_prov))) + L"리";
+				}
+
+			}
+			else
+			{
+				present_com = L"대기 중";
+			}
+		}
+		if (auto R = m_gamedata->nations.find(Q->second->owner); R != m_gamedata->nations.end())
+		{
+			nation_name = R->second->MainName;
+		}
+	}
+
+	m_DrawItems->$(L".myForm").css(
+		{
+			L"gamedata-provinceid", Str(leader_id)
+		});
+	m_DrawItems->$(L".myForm #flag").css(
+		{
+			L"src", nation_name
+		});
+	m_DrawItems->$(L".myForm #textContainer text0").css(
+		{
+			L"text", nation_name
+		});
+	m_DrawItems->$(L".myForm #textContainer text1").css(
+		{
+			L"text", present_com
+		});
+	m_DrawItems->$(L".myForm #head").css(
+		{
+			L"text", L"LeaderId : " + Str(leader_id)
+		});
+	m_DrawItems->$(L".myForm #tail").css(
+		{
+			L"text", L"군사 확인 메뉴"
+		});
+	m_DrawItems->$(L".myForm #textContainer text2").css(
+		{
+			L"text", progress
+		});
+
+	m_DrawItems->$(L".myForm #buttonbar button0 text").css(
+		{
+			L"text", L"잠김",
+			L"mousedown", L""
+		});
+	m_DrawItems->$(L".myForm #buttonbar button1 text").css(
+		{
+			L"text", L"잠김",
+			L"mousedown", L""
+		});
+	m_DrawItems->$(L".myForm #buttonbar button2 text").css(
+		{
+			L"text", L"잠김",
+			L"mousedown", L""
+		});
+}
+
+void MyApp::GUIUpdatePanelProvince(ProvinceId prov_id)
+{
+	auto prov = m_gamedata->province.find(prov_id);
+	if (prov == m_gamedata->province.end())
+		return;
+
+	auto N = m_gamedata->nations.find(prov->second->owner);
+	std::wstring nation_name = N == m_gamedata->nations.end() ? L"말갈" : N->second->MainName;
+
+	m_DrawItems->$(L".myForm").css(
+		{
+			L"gamedata-provinceid", Str(prov_id)
+		});
+	m_DrawItems->$(L".myForm #flag").css(
+		{
+			L"src", nation_name
+		});
+	m_DrawItems->$(L".myForm #textContainer text0").css(
+		{
+			L"text", nation_name
+		});
+	m_DrawItems->$(L".myForm #textContainer text1").css(
+		{
+			L"text", L"알 수 없음"
+		});
+	m_DrawItems->$(L".myForm #head").css(
+		{
+			L"text", prov->second->name
+		});
+	m_DrawItems->$(L".myForm #tail").css(
+		{
+			L"text", L"영토 확인 메뉴"
+		});
+	m_DrawItems->$(L".myForm #textContainer text2").css(
+		{
+			L"text", L"알 수 없음"
+		});
+
+	m_DrawItems->$(L".myForm #buttonbar button0 text").css(
+		{
+			L"text", L"병사 소집",
+			L"mousedown", L"DraftForP3"
+		});
+	m_DrawItems->$(L".myForm #buttonbar button1 text").css(
+		{
+			L"text", L"잠김",
+			L"mousedown", L""
+		});
+	m_DrawItems->$(L".myForm #buttonbar button2 text").css(
+		{
+			L"text", L"잠김",
+			L"mousedown", L""
+		});
 }
 
 void MyApp::Execute(const std::wstring& func_name, const std::uint64_t& uuid)
 {
 	
 
-	for (auto& O : m_DrawItems->$(Str(uuid)))
+	auto& O = *m_DrawItems->withUUID(uuid).content.begin();
 	{
 		if (func_name == L"FormHold")
 		{
+			
 			(*O)[L"hold"] = L"1";
 			(*O)[L"FirstMousePos.x"] = Str(mLastMousePos.x);
 			(*O)[L"FirstMousePos.y"] = Str(mLastMousePos.y);
@@ -950,51 +1287,44 @@ void MyApp::Execute(const std::wstring& func_name, const std::uint64_t& uuid)
 		}
 		else if (func_name == L"SelectLeader")
 		{
-			/*auto P = (**m_DrawItems->$(Str(uuid) + L" .. .. ..").begin());
-			std::wstring nation_name = L"말갈";
+			auto P = (*m_DrawItems->$(Str(uuid) + L" ..").begin());
 			
-			.abc ..
+			LeaderId leader = std::stoull((*P)[L"gamedata-leaderid"]);
 
-			m_DrawItems->$(L".myForm").css(
+			for (auto& Q : m_gamedata->leaders)
+			{
+				if (Q.first == leader)
 				{
-					L"gamedata-provinceid", P[L"gamedata-leaderid"]
-				});
-			m_DrawItems->$(L".myForm #flag").css(
+					Q.second->selected = !Q.second->selected;
+					if (Q.second->selected)
+					{
+						m_DrawItems->$(L"#leader" + Str(Q.first)).css(
+							{
+								L"src", L"WindowHighlight"
+							}
+						);
+					}
+					else
+					{
+						m_DrawItems->$(L"#leader" + Str(Q.first)).css(
+							{
+								L"src", L"Window"
+							}
+						);
+					}
+				}
+				else if (Q.second->selected && !GetAsyncKeyState(VK_LSHIFT))
 				{
-					L"src", nation_name
-				});
-			m_DrawItems->$(L".myForm #textContainer text0").css(
-				{
-					L"text", nation_name
-				});
-			m_DrawItems->$(L".myForm #textContainer text1").css(
-				{
-					L"text", L"알 수 없음"
-				});
-			m_DrawItems->$(L".myForm #head").css(
-				{
-					L"text", prov->second->name
-				});
-			m_DrawItems->$(L".myForm #textContainer text2").css(
-				{
-					L"text", L"알 수 없음"
-				});
+					m_DrawItems->$(L"#leader" + Str(Q.first)).css(
+						{
+							L"src", L"Window"
+						}
+					);
+					Q.second->selected = false;
 
-			m_DrawItems->$(L".myForm #buttonbar button0 text").css(
-				{
-					L"text", L"병사 소집",
-					L"mousedown", L""
-				});
-			m_DrawItems->$(L".myForm #buttonbar button1 text").css(
-				{
-					L"text", L"잠김",
-					L"mousedown", L""
-				});
-			m_DrawItems->$(L".myForm #buttonbar button2 text").css(
-				{
-					L"text", L"잠김",
-					L"mousedown", L""
-				});*/
+				}
+			}
+			GUIUpdatePanelLeader(leader);
 		}
 	}
 }
@@ -1026,7 +1356,7 @@ void MyApp::GameUpdate()
 	}
 
 	XMFLOAT4 rgb;
-	std::list<std::shared_ptr<Leader>> itr_buf;
+	std::list<decltype(m_gamedata->leaders)::value_type> itr_buf;
 	for (const auto& O : m_gamedata->province)
 	{
 		if (!O.second->p_num)
@@ -1082,7 +1412,6 @@ void MyApp::GameUpdate()
 					L"vertical-align", L"center"
 				}
 			);
-
 			m_DrawItems->$(L"#provtext" + Str(O.first)).css(
 				{
 					L"enable", L"enable",
@@ -1113,7 +1442,7 @@ void MyApp::GameUpdate()
 		itr_buf.clear();
 		for (const auto& P : m_gamedata->leaders)
 		{
-			if (P->location == O.first)
+			if (P.second->location == O.first)
 			{
 				itr_buf.push_back(P);
 			}
@@ -1124,7 +1453,7 @@ void MyApp::GameUpdate()
 		{
 			if (s.z >= 1.f && s.z <= 1000.0f)
 			{
-				m_DrawItems->$(L"#leader" + Str(P->uuid)).css(
+				m_DrawItems->$(L"#leader" + Str(P.first)).css(
 					{
 						L"enable", L"enable",
 						L"left", Str(s.x + (i - (itr_buf.size() - 1.f) / 2) * size * 100.f),
@@ -1136,7 +1465,7 @@ void MyApp::GameUpdate()
 						L"vertical-align", L"center"
 					}
 				);
-				m_DrawItems->$(L"#leader" + Str(P->uuid) + L" flag").css(
+				m_DrawItems->$(L"#leader" + Str(P.first) + L" flag").css(
 					{
 						L"enable", L"enable",
 						L"width", Str(size * 95.f / 32 * 26),
@@ -1149,12 +1478,12 @@ void MyApp::GameUpdate()
 			}
 			else
 			{
-				m_DrawItems->$(L"#leader" + Str(P->uuid)).css(
+				m_DrawItems->$(L"#leader" + Str(P.first)).css(
 					{
 						L"enable", L"disable"
 					}
 				);
-				m_DrawItems->$(L"#leader" + Str(P->uuid) + L" flag").css(
+				m_DrawItems->$(L"#leader" + Str(P.first) + L" flag").css(
 					{
 						L"enable", L"disable"
 					}
@@ -1226,50 +1555,20 @@ void MyApp::ProvinceMousedown(WPARAM btnState, ProvinceId id)
 
 	if (btnState & MK_LBUTTON)
 	{
-		auto N = m_gamedata->nations.find(prov->second->owner);
-		std::wstring nation_name = N == m_gamedata->nations.end() ? L"말갈" : N->second->MainName;
 
-		m_DrawItems->$(L".myForm").css(
-			{
-				L"gamedata-provinceid", Str(id)
-			});
-		m_DrawItems->$(L".myForm #flag").css(
+		for (auto& O : m_gamedata->leaders)
 		{
-			L"src", nation_name
-		});
-		m_DrawItems->$(L".myForm #textContainer text0").css(
-		{
-			L"text", nation_name
-		});
-		m_DrawItems->$(L".myForm #textContainer text1").css(
+			if (O.second->selected)
 			{
-				L"text", L"알 수 없음"
-			});
-		m_DrawItems->$(L".myForm #head").css(
-			{
-				L"text", prov->second->name
-			});
-		m_DrawItems->$(L".myForm #textContainer text2").css(
-			{
-				L"text", L"알 수 없음"
-			});
-
-		m_DrawItems->$(L".myForm #buttonbar button0 text").css(
-			{
-				L"text", L"병사 소집",
-				L"mousedown", L"DraftForP3"
-			});
-		m_DrawItems->$(L".myForm #buttonbar button1 text").css(
-			{
-				L"text", L"잠김",
-				L"mousedown", L""
-			});
-		m_DrawItems->$(L".myForm #buttonbar button2 text").css(
-			{
-				L"text", L"잠김",
-				L"mousedown", L""
-			});
-
+				m_DrawItems->$(L"#leader" + Str(O.first)).css(
+					{
+						L"src", L"Window"
+					}
+				);
+				O.second->selected = false;
+			}
+		}
+		GUIUpdatePanelProvince(id);
 		/*if (prov->second->owner == 0)
 		{
 			prov->second->ruler = mUser.nationPick;
@@ -1298,7 +1597,22 @@ void MyApp::ProvinceMousedown(WPARAM btnState, ProvinceId id)
 	}
 	else if (btnState & MK_RBUTTON)
 	{
+		if (last_leader_id > 0)
+		{
+			for (auto& O : m_gamedata->leaders)
+			{
+				if (O.second->selected)
+				{
+					O.second->cmd.clear();
+					for (auto P : ProvincePath(m_gamedata->province, m_gamedata->province_connect, O.second->location, id))
+					{
+						O.second->cmd.push_back(Command(CommandType::Move, P));
+					}
 
+				}
+			}
+			GUIUpdatePanelLeader();
+		}
 	}
 	else if (btnState & MK_MBUTTON)
 	{
@@ -1322,7 +1636,6 @@ void MyApp::OnKeyDown(WPARAM btnState)
 	float deltaTime = mTimer.DeltaTime();
 	//bool pressAlt = !keyState.at(VK_MENU);
 	bool pressShift = GetAsyncKeyState(VK_LSHIFT) != 0;
-
 	//bool pressCtrl = !keyState.at(VK_CONTROL);
 
 	if (keyState.at('A'))
@@ -1704,53 +2017,53 @@ void MyApp::OnMouseUp(WPARAM btnState, int x, int y)
 
 std::list<YTML::DrawItem>::reverse_iterator MyApp::MouseOnUI(int x, int y)
 {
-	for (auto& O = m_DrawItems->data.rbegin(); O != m_DrawItems->data.rend(); ++O)
+	for (auto O = m_DrawItems->data.rbegin(); O != m_DrawItems->data.rend(); ++O)
 	{
 		if ((*O)[L"enable"] == L"disable")
 			continue;
 
-		point.x = Float((*O)[L"left"]);
-		point.y = Float((*O)[L"top"]);
-		point.x += Float((*O)[L"position-left"]);
-		point.y += Float((*O)[L"position-top"]);
+		Draw_point.x = Float((*O)[L"left"]);
+		Draw_point.y = Float((*O)[L"top"]);
+		Draw_point.x += Float((*O)[L"position-left"]);
+		Draw_point.y += Float((*O)[L"position-top"]);
 
-		size.width = Float((*O)[L"width"]);
-		size.height = Float((*O)[L"height"]);
+		Draw_size.width = Float((*O)[L"width"]);
+		Draw_size.height = Float((*O)[L"height"]);
 
 		if ((*O)[L"horizontal-align"] == L"center")
 		{
-			rect.left = point.x - size.width / 2.f;
-			rect.right = point.x + size.width / 2.f;
+			Draw_rect.left = Draw_point.x - Draw_size.width / 2.f;
+			Draw_rect.right = Draw_point.x + Draw_size.width / 2.f;
 		}
 		else if ((*O)[L"horizontal-align"] == L"right")
 		{
-			rect.left = point.x - size.width;
-			rect.right = point.x;
+			Draw_rect.left = Draw_point.x - Draw_size.width;
+			Draw_rect.right = Draw_point.x;
 		}
 		else
 		{
-			rect.left = point.x;
-			rect.right = point.x + size.width;
+			Draw_rect.left = Draw_point.x;
+			Draw_rect.right = Draw_point.x + Draw_size.width;
 		}
 
 		if ((*O)[L"vertical-align"] == L"center")
 		{
-			rect.top = point.y - size.height / 2.f;
-			rect.bottom = point.y + size.height / 2.f;
+			Draw_rect.top = Draw_point.y - Draw_size.height / 2.f;
+			Draw_rect.bottom = Draw_point.y + Draw_size.height / 2.f;
 		}
 		else if ((*O)[L"vertical-align"] == L"top")
 		{
-			rect.top = point.y - size.height;
-			rect.bottom = point.y;
+			Draw_rect.top = Draw_point.y - Draw_size.height;
+			Draw_rect.bottom = Draw_point.y;
 		}
 		else
 		{
-			rect.top = point.y;
-			rect.bottom = point.y + size.height;
+			Draw_rect.top = Draw_point.y;
+			Draw_rect.bottom = Draw_point.y + Draw_size.height;
 		}
 
-		if (rect.left <= x && rect.right >= x &&
-			rect.top <= y && rect.bottom >= y && (*O)[L"pointer-events"] != L"none")
+		if (Draw_rect.left <= x && Draw_rect.right >= x &&
+			Draw_rect.top <= y && Draw_rect.bottom >= y && (*O)[L"pointer-events"] != L"none")
 		{
 			return O;
 		}
@@ -1958,6 +2271,21 @@ void MyApp::UpdateWaves(const GameTimer& gt)
 	}
 
 	mWavesRitem->Geo->VertexBufferGPU = currWavesVB->Resource();
+
+	/*auto currArrowsVB = mCurrFrameResource->WavesVB.get();
+	for (int i = 0; i < mArrows.vertices.size(); ++i)
+	{
+		Vertex v;
+
+		v.Pos = mArrows.vertices.at(i).Pos;
+		v.Normal = mArrows.vertices.at(i).Normal;
+
+		v.TexC = mArrows.vertices.at(i).TexC;
+
+		currArrowsVB->CopyData(i, v);
+	}
+	mArrowRitem->Geo->VertexBufferGPU = currArrowsVB->Resource();*/
+
 }
 
 void MyApp::LoadTextures()
@@ -1983,9 +2311,17 @@ void MyApp::LoadTextures()
 		mCommandList.Get(), fenceTex->Filename.c_str(),
 		fenceTex->Resource, fenceTex->UploadHeap));
 
+	auto arrowTex = std::make_unique<Texture>();
+	arrowTex->Name = "arrowTex";
+	arrowTex->Filename = L"Textures/Arrow.dds";
+	ThrowIfFailed(DirectX::CreateDDSTextureFromFile12(md3dDevice.Get(),
+		mCommandList.Get(), arrowTex->Filename.c_str(),
+		arrowTex->Resource, arrowTex->UploadHeap));
+
 	mTextures[grassTex->Name] = std::move(grassTex);
 	mTextures[waterTex->Name] = std::move(waterTex);
 	mTextures[fenceTex->Name] = std::move(fenceTex);
+	mTextures[arrowTex->Name] = std::move(arrowTex);
 }
 
 void MyApp::BuildRootSignature()
@@ -2047,6 +2383,7 @@ void MyApp::BuildDescriptorHeaps()
 	auto grassTex = mTextures["grassTex"]->Resource;
 	auto waterTex = mTextures["waterTex"]->Resource;
 	auto fenceTex = mTextures["fenceTex"]->Resource;
+	auto arrowTex = mTextures["arrowTex"]->Resource;
 
 	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
 	srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
@@ -2067,6 +2404,12 @@ void MyApp::BuildDescriptorHeaps()
 
 	srvDesc.Format = fenceTex->GetDesc().Format;
 	md3dDevice->CreateShaderResourceView(fenceTex.Get(), &srvDesc, hDescriptor);
+
+	// next descriptor
+	hDescriptor.Offset(1, mCbvSrvDescriptorSize);
+
+	srvDesc.Format = arrowTex->GetDesc().Format;
+	md3dDevice->CreateShaderResourceView(arrowTex.Get(), &srvDesc, hDescriptor);
 }
 
 void MyApp::BuildShadersAndInputLayout()
@@ -2111,7 +2454,6 @@ void MyApp::BuildShadersAndInputLayout()
 		{ "PROVCOLOR", 0, DXGI_FORMAT_R32G32B32_UINT, 0, 32, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 }
 	};
 }
-
 
 void MyApp::BuildLandGeometry()
 {
@@ -2188,9 +2530,12 @@ void MyApp::BuildLandGeometry()
 		Color32 ind;
 		unsigned char r, g, b;
 		float R0, G0, B0, R1, G1, B1, syc;
-		size_t addr;
-		Color32 dex;
+		size_t addr, naddr;
+		Color32 dex, ndex;
 		mWaves = std::make_unique<Waves>(map_h / 3, map_w / 3, 3.0f, 0.03f, 4.0f, 0.2f);
+		size_t nx, ny;
+		int W[4][2] = { {1 , 0}, {0, -1}, {-1, 0}, {0, 1} };
+
 		for (size_t y = h - 1;; --y) {
 			for (size_t x = 0; x < w; ++x) {
 				//OutputDebugStringA((std::to_string(x) + ", " + std::to_string(y) + "\n").c_str());
@@ -2199,6 +2544,7 @@ void MyApp::BuildLandGeometry()
 				g = (int)buf[addr + 1];
 				b = (int)buf[addr + 2];
 				mLandVertices[x + y * w].Pos = { (x - (w - 1) / 2.f), (float)(r + g + b) / 128.0f - 1.5f, (y - (h - 1) / 2.f) };
+
 
 				if (mLandVertices[x + y * w].Pos.y > 1.5f)
 				{
@@ -2220,6 +2566,20 @@ void MyApp::BuildLandGeometry()
 				//Registed Province Color
 				if (auto search = prov_key.find(dex); search != prov_key.end())
 				{
+					for (int i = 0; i < 4; i++)
+					{
+						nx = x + W[i][0];
+						ny = y + W[i][0];
+						naddr = 54 + (nx + (ny * w)) * 3;
+						ndex = rgb2dex(prov_buf.at(naddr + 2), prov_buf.at(naddr + 1), prov_buf.at(naddr));
+						if (nx < w && ny < h && dex != ndex)
+						{
+							if (auto nsearch = prov_key.find(ndex); nsearch != prov_key.end())
+							{
+								m_gamedata->province_connect.insert(std::make_pair(std::make_pair(search->second.first, nsearch->second.first), FLT_MAX));
+							}
+						}
+					}
 					mLandVertices[x + y * w].Prov = search->second.first;
 					if (auto search_stack = m_gamedata->province.find(search->second.first); search_stack == m_gamedata->province.end())
 					{
@@ -2258,6 +2618,7 @@ void MyApp::BuildLandGeometry()
 					{
 						O->second.second++;
 					}
+
 				}
 
 
@@ -2318,7 +2679,19 @@ void MyApp::BuildLandGeometry()
 			}
 		});
 
-
+		for (auto& O : m_gamedata->province)
+		{
+			for (auto& P : m_gamedata->province)
+			{
+				if (auto Q = m_gamedata->province_connect.find(std::make_pair(O.first, P.first)); Q != m_gamedata->province_connect.end())
+				{
+					float width = sqrtf(powf(O.second->on3Dpos.x - P.second->on3Dpos.x, 2) + powf(O.second->on3Dpos.z - P.second->on3Dpos.z, 2));
+					float height = max(- O.second->on3Dpos.y +P.second->on3Dpos.y, 0);
+					Q->second = width + height;
+					//OutputDebugStringW((O.second->name + L"->" + P.second->name + L" " + Str(Q->second) + L"km\n").c_str());
+				}
+			}
+		}
 
 
 
@@ -2364,8 +2737,8 @@ void MyApp::BuildLandGeometry()
 		geo->IndexBufferByteSize = ibByteSize;
 
 		BoundingBox bounds;
-		XMStoreFloat3(&bounds.Center, 0.5f*(vMin + vMax));
-		XMStoreFloat3(&bounds.Extents, 0.5f*(vMax - vMin));
+		DirectX::XMStoreFloat3(&bounds.Center, 0.5f*(vMin + vMax));
+		DirectX::XMStoreFloat3(&bounds.Extents, 0.5f*(vMax - vMin));
 
 		SubmeshGeometry submesh;
 		submesh.IndexCount = (UINT)indices.size();
@@ -2436,6 +2809,66 @@ void MyApp::BuildWavesGeometry()
 	mGeometries["waterGeo"] = std::move(geo);
 }
 
+void MyApp::BuildArrowGeometry()
+{
+	//std::vector<std::uint16_t> indices(3 * mWaves->TriangleCount()); // 3 indices per face
+
+
+	std::vector<Vertex> vertices = mArrows.vertices;
+	std::vector<std::uint16_t> indices = mArrows.indices;
+
+	XMFLOAT3 vMinf3(+MathHelper::Infinity, +MathHelper::Infinity, +MathHelper::Infinity);
+	XMFLOAT3 vMaxf3(-MathHelper::Infinity, -MathHelper::Infinity, -MathHelper::Infinity);
+
+	XMVECTOR vMin = XMLoadFloat3(&vMinf3);
+	XMVECTOR vMax = XMLoadFloat3(&vMaxf3);
+
+	for (size_t i = 0; i < vertices.size(); ++i)
+	{
+		XMVECTOR P = XMLoadFloat3(&vertices[i].Pos);
+		vMin = XMVectorMin(vMin, P);
+		vMax = XMVectorMax(vMax, P);
+	}
+
+	const UINT vbByteSize = (UINT)vertices.size() * sizeof(Vertex);
+	const UINT ibByteSize = (UINT)indices.size() * sizeof(std::uint16_t);
+
+	auto geo = std::make_unique<MeshGeometry>();
+	geo->Name = "arrowGeo";
+
+	ThrowIfFailed(D3DCreateBlob(vbByteSize, &geo->VertexBufferCPU));
+	CopyMemory(geo->VertexBufferCPU->GetBufferPointer(), vertices.data(), vbByteSize);
+
+	ThrowIfFailed(D3DCreateBlob(ibByteSize, &geo->IndexBufferCPU));
+	CopyMemory(geo->IndexBufferCPU->GetBufferPointer(), indices.data(), ibByteSize);
+
+	geo->VertexBufferGPU = d3dUtil::CreateDefaultBuffer(md3dDevice.Get(),
+		mCommandList.Get(), vertices.data(), vbByteSize, geo->VertexBufferUploader);
+
+	geo->IndexBufferGPU = d3dUtil::CreateDefaultBuffer(md3dDevice.Get(),
+		mCommandList.Get(), indices.data(), ibByteSize, geo->IndexBufferUploader);
+
+	geo->VertexByteStride = sizeof(Vertex);
+	geo->VertexBufferByteSize = vbByteSize;
+	geo->IndexFormat = DXGI_FORMAT_R16_UINT;
+	geo->IndexBufferByteSize = ibByteSize;
+	
+	BoundingBox bounds;
+	DirectX::XMStoreFloat3(&bounds.Center, 0.5f*(vMin + vMax));
+	DirectX::XMStoreFloat3(&bounds.Extents, 0.5f*(vMax - vMin));
+
+	SubmeshGeometry submesh;
+	submesh.IndexCount = (UINT)indices.size();
+	submesh.StartIndexLocation = 0;
+	submesh.BaseVertexLocation = 0;
+	submesh.Bounds = bounds;
+
+	geo->DrawArgs["arrow"] = submesh;
+
+	mGeometries["arrowGeo"] = std::move(geo);
+
+}
+
 void MyApp::BuildBoxGeometry()
 {
 	GeometryGenerator geoGen;
@@ -2489,8 +2922,8 @@ void MyApp::BuildBoxGeometry()
 	geo->IndexBufferByteSize = ibByteSize;
 
 	BoundingBox bounds;
-	XMStoreFloat3(&bounds.Center, 0.5f*(vMin + vMax));
-	XMStoreFloat3(&bounds.Extents, 0.5f*(vMax - vMin));
+	DirectX::XMStoreFloat3(&bounds.Center, 0.5f*(vMin + vMax));
+	DirectX::XMStoreFloat3(&bounds.Extents, 0.5f*(vMax - vMin));
 
 	SubmeshGeometry submesh;
 	submesh.IndexCount = (UINT)indices.size();
@@ -2598,7 +3031,7 @@ void MyApp::BuildFrameResources()
 	for (int i = 0; i < gNumFrameResources; ++i)
 	{
 		mFrameResources.push_back(std::make_unique<FrameResource>(md3dDevice.Get(),
-			1, (UINT)mAllRitems.size(), (UINT)mMaterials.size(), mWaves->VertexCount()));
+			1, (UINT)mAllRitems.size(), (UINT)mMaterials.size(), mWaves->VertexCount(), mArrows.vertices.size()));
 	}
 }
 
@@ -2630,14 +3063,24 @@ void MyApp::BuildMaterials()
 	wirefence->FresnelR0 = XMFLOAT3(0.1f, 0.1f, 0.1f);
 	wirefence->Roughness = 0.25f;
 
+	auto arrow = std::make_unique<Material>();
+	arrow->Name = "arrow";
+	arrow->MatCBIndex = 3;
+	arrow->DiffuseSrvHeapIndex = 3;
+	arrow->DiffuseAlbedo = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
+	arrow->FresnelR0 = XMFLOAT3(0.1f, 0.1f, 0.1f);
+	arrow->Roughness = 0.25f;
+
 	mMaterials["grass"] = std::move(grass);
 	mMaterials["water"] = std::move(water);
 	mMaterials["wirefence"] = std::move(wirefence);
+	mMaterials["arrow"] = std::move(arrow);
 }
 
 void MyApp::BuildRenderItems()
 {
 	UINT all_CBIndex = 0;
+
 
 	auto wavesRitem = std::make_unique<RenderItem>();
 	wavesRitem->World = MathHelper::Identity4x4();
@@ -2654,6 +3097,23 @@ void MyApp::BuildRenderItems()
 	mWavesRitem = wavesRitem.get();
 
 	mRitemLayer[(int)RenderLayer::Transparent].push_back(wavesRitem.get());
+
+	auto arrowRitem = std::make_unique<RenderItem>();
+	arrowRitem->World = MathHelper::Identity4x4();
+	XMStoreFloat4x4(&arrowRitem->World, XMMatrixScaling(1.0f, 1.0f, 1.0f) + XMMatrixTranslation(0,3,0));
+	//XMStoreFloat4x4(&arrowRitem->TexTransform, XMMatrixScaling(5.0f, 5.0f, 1.0f));
+	arrowRitem->ObjCBIndex = all_CBIndex++;
+	arrowRitem->PrimitiveType = D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+	arrowRitem->Mat = mMaterials["arrow"].get();
+	arrowRitem->Geo = mGeometries["arrowGeo"].get();
+    arrowRitem->Bounds = arrowRitem->Geo->DrawArgs["arrow"].Bounds;
+	arrowRitem->IndexCount = arrowRitem->Geo->DrawArgs["arrow"].IndexCount;
+	arrowRitem->StartIndexLocation = arrowRitem->Geo->DrawArgs["arrow"].StartIndexLocation;
+	arrowRitem->BaseVertexLocation = arrowRitem->Geo->DrawArgs["arrow"].BaseVertexLocation;
+	   
+
+	mRitemLayer[(int)RenderLayer::Transparent].push_back(arrowRitem.get());
+	mAllRitems.push_back(std::move(arrowRitem));
 
 	auto gridRitem = std::make_unique<RenderItem>();
 	gridRitem->World = MathHelper::Identity4x4();
@@ -2675,7 +3135,7 @@ void MyApp::BuildRenderItems()
 
 
 
-	boxRitem.ObjCBIndex = 2;
+	boxRitem.ObjCBIndex = all_CBIndex++;
 	boxRitem.Mat = mMaterials["wirefence"].get();
 	boxRitem.Geo = mGeometries["boxGeo"].get();
 	boxRitem.PrimitiveType = D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
@@ -2774,8 +3234,7 @@ void MyApp::DrawRenderItems(ID3D12GraphicsCommandList* cmdList, const std::vecto
 
 		if (!ri->Visible)
 			continue;
-
-
+		
 		cmdList->IASetVertexBuffers(0, 1, new D3D12_VERTEX_BUFFER_VIEW(ri->Geo->VertexBufferView()));
 		cmdList->IASetIndexBuffer(new D3D12_INDEX_BUFFER_VIEW(ri->Geo->IndexBufferView()));
 		cmdList->IASetPrimitiveTopology(ri->PrimitiveType);

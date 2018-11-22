@@ -117,6 +117,9 @@
     <Image Include="Textures\water1.dds">
       <Filter>Textures</Filter>
     </Image>
+    <Image Include="Textures\Arrow.dds">
+      <Filter>Textures</Filter>
+    </Image>
   </ItemGroup>
   <ItemGroup>
     <None Include="Map\map.psd">

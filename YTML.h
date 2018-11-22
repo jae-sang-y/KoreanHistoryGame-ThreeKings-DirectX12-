@@ -89,7 +89,6 @@ namespace YTML
 					std::wstring construct = buf.substr(0, end + 1);
 					{
 						size_t sign = construct.find('=');
-						int a = 0;
 						//Set RValue
 						if (sign == std::wstring::npos)
 						{
@@ -118,6 +117,7 @@ namespace YTML
 			{
 				//Corrupt
 			}
+
 		}
 
 		std::wstring& operator[] (const std::wstring& index) { return Attribute[index]; }
