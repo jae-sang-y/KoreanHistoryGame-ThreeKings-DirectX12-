@@ -64,6 +64,7 @@ enum class RenderLayer : int
 	Transparent,
 	AlphaTested,
 	Province,
+	Water,
 	Count
 };
 template<typename T>
@@ -99,7 +100,7 @@ public:
 	Arrows()
 	{
 		std::vector<XMFLOAT2> points;
-		for (float i = 5; i <= 60; i += 0.5)
+		for (float i = 5; i <= 60; i += 0.05)
 		{
 			points.push_back(XMFLOAT2(0.4f*cosf(i) * i, 0.4f*sinf(i) * i));
 		}
@@ -842,6 +843,9 @@ void MyApp::Draw(const GameTimer& gt)
 	DrawRenderItems(mCommandList.Get(), mRitemLayer[(int)RenderLayer::Province]);
 
 	mCommandList->SetPipelineState(mPSOs["transparent"].Get());
+	DrawRenderItems(mCommandList.Get(), mRitemLayer[(int)RenderLayer::Water]); 
+
+	mCommandList->SetPipelineState(mPSOs["alphaTested"].Get());
 	DrawRenderItems(mCommandList.Get(), mRitemLayer[(int)RenderLayer::Transparent]);
 
 	ThrowIfFailed(mCommandList->Close());
@@ -3067,9 +3071,9 @@ void MyApp::BuildMaterials()
 	arrow->Name = "arrow";
 	arrow->MatCBIndex = 3;
 	arrow->DiffuseSrvHeapIndex = 3;
-	arrow->DiffuseAlbedo = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
-	arrow->FresnelR0 = XMFLOAT3(0.1f, 0.1f, 0.1f);
-	arrow->Roughness = 0.25f;
+	arrow->DiffuseAlbedo = XMFLOAT4(1.0f, 0.5f, 0.3f, 1.0f);
+	arrow->FresnelR0 = XMFLOAT3(1.f, 1.f, 1.f);
+	arrow->Roughness = 0.5f;
 
 	mMaterials["grass"] = std::move(grass);
 	mMaterials["water"] = std::move(water);
@@ -3096,7 +3100,7 @@ void MyApp::BuildRenderItems()
 
 	mWavesRitem = wavesRitem.get();
 
-	mRitemLayer[(int)RenderLayer::Transparent].push_back(wavesRitem.get());
+	mRitemLayer[(int)RenderLayer::Water].push_back(wavesRitem.get());
 
 	auto arrowRitem = std::make_unique<RenderItem>();
 	arrowRitem->World = MathHelper::Identity4x4();
