@@ -92,94 +92,254 @@ void dex2rgb(unsigned int& r, unsigned int& g, unsigned int& b, const Color32& d
 	b = (dex & 255);
 }
 
+struct Province {
+	std::wstring name;
+	Color32 color;
+	std::uint64_t p_num = 1;
+	XMFLOAT3 pixel;
+	XMFLOAT3 on3Dpos;
+
+
+	bool is_rebel = false;
+	NationId owner = 0;
+	NationId ruler = 0;
+
+	std::int64_t man = 0;
+
+	Province()
+	{
+	}
+	Province(std::wstring _name, Color32 _color, XMFLOAT3 _pixel) :name(_name), color(_color), pixel(_pixel)
+	{
+
+	}
+};
+
+using WCHAR3 = WCHAR[3];
+struct Nation
+{
+	XMFLOAT4 MainColor = { 0.f, 0.f, 0.f, 0.f };
+	std::wstring MainName = L"오류";
+	bool Ai = true;
+};
+enum class CommandType
+{
+	Move,
+	Sieze
+};
+struct Command
+{
+	const CommandType type;
+	const ProvinceId target_prov;
+	const LeaderId target_leader;
+	const float need;
+	Command(const CommandType _type, const ProvinceId prov = 0, const LeaderId leader = 0, const float _need = 0) : type(_type), target_prov(prov), target_leader(leader), need(_need) {}
+};
+
+struct Leader
+{
+	std::list<Command> cmd;
+	float cmd_pr = 0.f;
+	bool enable = true;
+	ProvinceId location;
+	bool selected = false;
+
+	std::int64_t size = 1000;
+
+	NationId owner;
+	Leader(const ProvinceId& loc, const NationId& own, const std::int64_t& _size) : location(loc), owner(own), size(_size) {};
+};
+enum class ProvincePathOutState {
+	NotOut,
+	WaitOut,
+	Out
+};
+struct ProvincePathNode
+{
+	float Length = FLT_MAX;
+	ProvinceId Nearest = 0;
+	ProvincePathOutState Out = ProvincePathOutState::NotOut;
+};
+struct ProvincePath
+{
+	std::list<ProvinceId> path;
+	std::map<ProvinceId, ProvincePathNode> prv;
+	decltype(path)::iterator begin() { return path.begin(); }
+	decltype(path)::iterator end() { return path.end(); }
+
+	ProvincePath(const std::map<ProvinceId, std::unique_ptr<Province>>&  _prv, const std::map<std::pair<ProvinceId, ProvinceId>, float> conn, const ProvinceId& Start, const ProvinceId& End)
+	{
+		if (Start == End) return;
+		for (const auto& O : _prv) prv[O.first] = ProvincePathNode();
+
+		prv.at(End).Length = 0;
+		prv.at(End).Out = ProvincePathOutState::WaitOut;
+
+		size_t limit = 0;
+		while (limit++ <= prv.size())
+		{
+			for (auto& O : prv)
+			{
+				if (O.second.Out == ProvincePathOutState::WaitOut)
+				{
+					for (auto& P : prv)
+					{
+						if (P.second.Out == ProvincePathOutState::NotOut)
+						{
+							if (auto Q = conn.find(std::make_pair(O.first, P.first)); Q != conn.end())
+							{
+								if (P.second.Length > O.second.Length + Q->second)
+								{
+									P.second.Length = O.second.Length + Q->second;
+									P.second.Nearest = O.first;
+								}
+							}
+						}
+					}
+					O.second.Out = ProvincePathOutState::Out;
+				}
+			}
+
+			/*if (prv.at(Start).Out == ProvincePathOutState::Out)
+			{
+				break;
+			}*/
+
+			float meter = FLT_MAX;
+			decltype(prv)::iterator itr = prv.end();
+			for (auto O = prv.begin(); O != prv.end(); ++O)
+			{
+				if (O->second.Out == ProvincePathOutState::NotOut && meter > O->second.Length)
+				{
+					meter = O->second.Length;
+					itr = O;
+				}
+			}
+			if (itr != prv.end())
+			{
+				itr->second.Out = ProvincePathOutState::WaitOut;
+			}
+			else
+			{
+				break;
+			}
+		}
+
+		if (prv.at(Start).Out != ProvincePathOutState::NotOut)
+		{
+			ProvinceId Index = Start;
+			do
+			{
+				Index = prv.at(Index).Nearest;
+				path.push_back(Index);
+			} while (Index != End);
+		}
+	}
+	ProvincePath() 
+	{
+
+	};
+};
 class Arrows
 {
 public:
 	std::vector<Vertex> vertices;
 	std::vector<std::uint16_t> indices;
-	Arrows()
+	std::vector<XMFLOAT3> points;
+	float width = 1.f;
+	void BuildLine()
 	{
-		std::vector<XMFLOAT2> points;
-		for (float i = 5; i <= 60; i += 0.05)
+		float width2 = width / 2.f;
+		size_t offset = vertices.size();
+
+		if (points.size() == 0) return;
+
+
+		float center = (points.size() - 1) / 2.f;
+		for (int i = 0; i < points.size() - 1; ++i)
 		{
-			points.push_back(XMFLOAT2(0.4f*cosf(i) * i, 0.4f*sinf(i) * i));
+			//float y = 2 - powf((points.size() - 1) / 2 - i, 2)/((points.size() - 1) / 2);
+
+			float y = (powf((i - center) / center, 2) - 1.f) * 1 ;
+
+			XMVECTOR v = XMLoadFloat2(new XMFLOAT2(points[i + 1].x - points[i].x, points[i +1].z - points[i].z));
+			v = XMVector2Orthogonal(v);
+			v = XMVector2Normalize(v);
+			XMFLOAT2 f;
+			XMStoreFloat2(&f, v);
+
+			vertices.push_back({ XMFLOAT3(points[i].x - f.x * width2,points[i].y - y, points[i].z - f.y * width2) ,XMFLOAT3(0,1,0), XMFLOAT2(1, 1) });
+			vertices.push_back({ XMFLOAT3(points[i].x + f.x * width2,points[i].y - y, points[i].z + f.y * width2) ,XMFLOAT3(0,1,0), XMFLOAT2(0, 1) });
 		}
 
-		float width2 = 1.f;
-		for (int i = 0; i < points.size(); ++i)
+		for (size_t i = points.size() - 1;  i < points.size();++i)
 		{
-			if (i > 0 && i < points.size() - 1)
-			{
-				auto V0 = XMLoadFloat2(new XMFLOAT2(points[i].x - points[i - 1].x, points[i].y - points[i - 1].y));
-				auto V1 = XMLoadFloat2(new XMFLOAT2(points[i].x - points[i + 1].x, points[i].y - points[i + 1].y));
+			XMVECTOR v = XMLoadFloat2(new XMFLOAT2(points[i].x - points[i - 1].x, points[i].z - points[i - 1].z));
+			v = XMVector2Orthogonal(v);
+			v = XMVector2Normalize(v);
+			XMFLOAT2 f;
+			XMStoreFloat2(&f, v);
 
-
-				V0 = XMVector2Normalize(V0);
-				V1 = XMVector2Normalize(V1);
-
-				if (XMVector2Equal(V0 + V1, XMLoadFloat2(new XMFLOAT2(0, 0))))
-				{
-					V0 = XMVector2Orthogonal(V0);
-				}
-				else
-				{
-					V0 += V1;
-				}
-
-				//V0 = XMVector2Orthogonal(V0);
-				V0 = XMVector2Normalize(V0);
-
-				XMFLOAT2 F;
-				XMStoreFloat2(&F, V0);
-
-
-				vertices.push_back({ XMFLOAT3(points[i].x - width2 * F.x,1.f, points[i].y - width2 * F.y) ,XMFLOAT3(0,1,0), XMFLOAT2(0, 1) });
-				vertices.push_back({ XMFLOAT3(points[i].x + width2 * F.x,1.f, points[i].y + width2 * F.y) ,XMFLOAT3(0,1,0), XMFLOAT2(1, 1) });
-
-			}
-			else if (i == 0)
-			{
-				auto V = XMLoadFloat2(new XMFLOAT2(points[i + 1].x - points[i].x, points[i + 1].y - points[i].y));
-				V = XMVector2Orthogonal(V);
-				V = XMVector2Normalize(V);
-				XMFLOAT2 F;
-				XMStoreFloat2(&F, V);
-
-				vertices.push_back({ XMFLOAT3(points[i].x + width2 * F.x,1.f, points[i].y + width2 * F.y) ,XMFLOAT3(0,1,0), XMFLOAT2(0, 1) });
-				vertices.push_back({ XMFLOAT3(points[i].x - width2 * F.x,1.f, points[i].y - width2 * F.y) ,XMFLOAT3(0,1,0), XMFLOAT2(1, 1) });
-			}
-			else
-			{
-				auto V = XMLoadFloat2(new XMFLOAT2(points[i].x - points[i - 1].x, points[i].y - points[i - 1].y));
-				V = XMVector2Orthogonal(V);
-				V = XMVector2Normalize(V);
-				XMFLOAT2 F;
-				XMStoreFloat2(&F, V);
-				
-				vertices.push_back({ XMFLOAT3(points[i].x + width2 * F.x,-1.f, points[i].y + width2 * F.y) ,XMFLOAT3(0,1,0), XMFLOAT2(0, 0) });
-				vertices.push_back({ XMFLOAT3(points[i].x - width2 * F.x,-1.f, points[i].y - width2 * F.y) ,XMFLOAT3(0,1,0), XMFLOAT2(1, 0) });
-			}
-
+			vertices.push_back({ XMFLOAT3(points[i].x - f.x * width2,points[i].y, points[i].z - f.y * width2) ,XMFLOAT3(0,1,0), XMFLOAT2(1, 0) });
+			vertices.push_back({ XMFLOAT3(points[i].x + f.x * width2,points[i].y, points[i].z + f.y * width2) ,XMFLOAT3(0,1,0), XMFLOAT2(0, 0) });
 		}
 
 		for (std::uint16_t i = 0; i < points.size() - 1; ++i)
 		{
-			indices.push_back(i * 2);
-			indices.push_back(i * 2 + 1);
-			indices.push_back(i * 2 + 3);
-			indices.push_back(i * 2 + 3);
-			indices.push_back(i * 2 + 1);
-			indices.push_back(i * 2);
-			indices.push_back(i * 2);
+			indices.push_back(static_cast<std::uint16_t>(offset + i * 2));
+			indices.push_back(static_cast<std::uint16_t>(offset + i * 2 + 1));
+			indices.push_back(static_cast<std::uint16_t>(offset + i * 2 + 2));
+
+			indices.push_back(static_cast<std::uint16_t>(offset + i * 2 + 1));
+			indices.push_back(static_cast<std::uint16_t>(offset + i * 2 + 2));
+			indices.push_back(static_cast<std::uint16_t>(offset + i * 2 + 3));
+			/*indices.push_back(i * 2);
 			indices.push_back(i * 2 + 3);
 			indices.push_back(i * 2 + 2);
 			indices.push_back(i * 2 + 2);
 			indices.push_back(i * 2 + 3);
-			indices.push_back(i * 2);
+			indices.push_back(i * 2);*/
 
 		}
-
 	}
+	Arrows()
+	{	
+
+		BuildLine();
+	}
+};
+
+struct Data
+{
+	bool run = true;
+
+	std::map<ProvinceId, std::unique_ptr<Province>> province;
+	std::map<std::pair<ProvinceId, ProvinceId>, float> province_connect;
+	std::unordered_map<NationId, std::unique_ptr<Nation>>  nations;
+
+	std::unordered_map<LeaderId, std::shared_ptr<Leader>> leaders;
+	std::uint64_t leader_progress = 1;
+
+	LeaderId last_leader_id = 0;
+	ProvinceId last_prov_id = 0;
+
+	Leader NewLeader(const ProvinceId& loc, const NationId& own, const std::int64_t& _size)
+	{
+		return Leader(loc, own, _size);
+	}
+};
+
+enum class DragType
+{
+	None,
+	View,
+	Leader
+};
+
+enum class GameControlType
+{
+	View,
+	Leader
 };
 
 class MyApp : public D3DApp
@@ -243,15 +403,18 @@ private:
 	void ProvinceMousedown(WPARAM btnState, ProvinceId id);
 	void CreateBrush();
 
+	void InsertArrow(const ProvinceId& start, ProvincePath& path, bool clear);
+	void UpdateArrow();
+	
 	void Query(const std::wstring& query);
 	void Execute(const std::wstring& func_name, const std::uint64_t& uuid);
 
+	void MainGame();
 
 	std::list<YTML::DrawItem>::reverse_iterator MyApp::MouseOnUI(int x, int y);
 private:
-	LeaderId last_leader_id = 0;
-	void GUIUpdatePanelLeader(LeaderId leader_id);
-	void GUIUpdatePanelProvince(ProvinceId prov_id);
+	void GUIUpdatePanelLeader(LeaderId leader_id = 0);
+	void GUIUpdatePanelProvince(ProvinceId prov_id = 0);
 
 	UINT mCbvSrvDescriptorSize = 0;
 
@@ -271,6 +434,7 @@ private:
 	std::vector<D3D12_INPUT_ELEMENT_DESC> mInputLayout_prv;
 
 	RenderItem* mWavesRitem = nullptr;
+	RenderItem* mArrowsRitem = nullptr;
 
 	// List of all the render items.
 	std::vector<std::unique_ptr<RenderItem>> mAllRitems;
@@ -306,160 +470,11 @@ private:
 	} mUser;
 
 
-	struct Province {
-		std::wstring name;
-		Color32 color;
-		std::uint64_t p_num = 1;
-		XMFLOAT3 pixel;
-		XMFLOAT3 on3Dpos;
+
+	bool Act(std::wstring wstr, std::initializer_list<std::wstring> args, bool need_return = false);
 
 
-		bool is_rebel = false;
-		NationId owner = 0;
-		NationId ruler = 0;
-
-		Province()
-		{
-		}
-		Province(std::wstring _name, Color32 _color, XMFLOAT3 _pixel) :name(_name), color(_color), pixel(_pixel)
-		{
-
-		}
-	};
-
-	using WCHAR3 = WCHAR[3];
-	struct Nation
-	{
-		XMFLOAT4 MainColor = { 0.f, 0.f, 0.f, 0.f };
-		std::wstring MainName = L"오류";
-	};
-	enum class CommandType
-	{
-		Move
-	};
-	struct Command
-	{
-		const CommandType type;
-		const ProvinceId target_prov;
-		const LeaderId target_leader;
-		Command(const CommandType _type, const ProvinceId prov = 0, const LeaderId leader = 0) : type(_type), target_prov(prov), target_leader(leader) {}
-	};
-
-	struct Leader
-	{
-		std::list<Command> cmd;
-		bool enable = true;
-		ProvinceId location;
-		bool selected = false;
-		NationId owner;
-		Leader(const ProvinceId& loc, const NationId own) : location(loc), owner(own) {};
-	};
-
-	struct Data
-	{
-		std::map<ProvinceId, std::unique_ptr<Province>> province;
-		std::map<std::pair<ProvinceId, ProvinceId>, float> province_connect;
-		std::unordered_map<NationId, std::unique_ptr<Nation>>  nations;
-
-		std::unordered_map<LeaderId, std::shared_ptr<Leader>> leaders;
-		std::uint64_t leader_progress = 1;
-		Leader NewLeader(const ProvinceId& loc, const NationId own)
-		{
-			return Leader(loc, own);
-		}
-	};
-	enum class ProvincePathOutState {
-		NotOut,
-		WaitOut,
-		Out
-	};
-	struct ProvincePathNode
-	{
-		float Length = FLT_MAX;
-		ProvinceId Nearest = 0;
-		ProvincePathOutState Out = ProvincePathOutState::NotOut;
-	};
-	struct ProvincePath
-	{
-		std::list<ProvinceId> path;
-		std::map<ProvinceId, ProvincePathNode> prv;
-		decltype(path)::iterator begin() { return path.begin(); }
-		decltype(path)::iterator end() { return path.end(); }
-
-		ProvincePath(const std::map<ProvinceId, std::unique_ptr<Province>>&  _prv, const std::map<std::pair<ProvinceId, ProvinceId>, float> conn, const ProvinceId& Start, const ProvinceId& End)
-		{
-			if (Start == End) return;
-			for (const auto& O : _prv) prv[O.first] = ProvincePathNode();
-
-			prv.at(End).Length = 0;
-			prv.at(End).Out = ProvincePathOutState::WaitOut;
-
-			size_t limit = 0;
-			while (limit++ <= prv.size())
-			{
-				for (auto& O : prv)
-				{
-					if (O.second.Out == ProvincePathOutState::WaitOut)
-					{
-						for (auto& P : prv)
-						{
-							if (P.second.Out == ProvincePathOutState::NotOut)
-							{
-								if (auto Q = conn.find(std::make_pair(O.first, P.first)); Q != conn.end())
-								{
-									if (P.second.Length > O.second.Length + Q->second)
-									{
-										P.second.Length = O.second.Length + Q->second;
-										P.second.Nearest = O.first;
-									}
-								}
-							}
-						}
-						O.second.Out = ProvincePathOutState::Out;
-					}
-				}
-
-				/*if (prv.at(Start).Out == ProvincePathOutState::Out)
-				{
-					break;
-				}*/
-
-				float meter = FLT_MAX;
-				decltype(prv)::iterator itr = prv.end();
-				for (auto O = prv.begin(); O != prv.end(); ++O)
-				{
-					if (O->second.Out == ProvincePathOutState::NotOut && meter > O->second.Length)
-					{
-						meter = O->second.Length;
-						itr = O;
-					}
-				}
-				if (itr != prv.end())
-				{
-					itr->second.Out = ProvincePathOutState::WaitOut;
-				}
-				else
-				{
-					break;
-				}
-			}
-			
-			if (prv.at(Start).Out != ProvincePathOutState::NotOut)
-			{
-				ProvinceId Index = Start;
-				do
-				{
- 					Index = prv.at(Index).Nearest;
-					path.push_back(Index);
-				} while (Index != End);
-			}
-		}
-	};
-
-	void Act(std::wstring wstr, std::initializer_list<std::wstring> args);
-
-
-	std::unique_ptr<Data> m_gamedata = std::make_unique<Data>();
+	std::shared_ptr<Data> m_gamedata = std::make_shared<Data>();
 
 	XMVECTOR mEyetarget = XMVectorSet(0.0f, 15.0f, 0.0f, 0.0f);
 
@@ -498,6 +513,15 @@ private:
 	D2D1_SIZE_F Draw_scale;
 
 	std::uint64_t focus = 0;
+	std::future<void> trdGame;
+
+	DragType dragtype;
+	int dragx, dragy;
+
+	GameControlType game_contype = GameControlType::View;
+	
+	std::mutex draw_mutex;
+
 };
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE prevInstance, PSTR cmdLine, int showCmd)
@@ -529,8 +553,95 @@ MyApp::MyApp(HINSTANCE hInstance)
 
 MyApp::~MyApp()
 {
+	GameClose();
 	if (md3dDevice != nullptr)
 		FlushCommandQueue();
+}
+
+void MyApp::MainGame() //!@
+{
+	//std::this_thread::sleep_for(std::chrono::seconds(1));	
+
+	OutputDebugStringA("Start Thread\n");
+	float NowTime = mTimer.TotalTime();
+	bool flag_update_leaders = false;
+	while (m_gamedata->run)
+	{
+		for (auto& O : m_gamedata->province)
+		{
+			O.second->man += (1900 - O.second->man) / 10 % 10 + 1;
+
+			if (m_gamedata->last_prov_id == O.first)
+			{
+				GUIUpdatePanelProvince();
+			}
+		}
+
+
+		flag_update_leaders = false;
+		for (auto& O : m_gamedata->leaders)
+		{
+			if (O.second->cmd.size() > 0)
+			{
+				auto B = O.second->cmd.begin();
+
+				if (O.second->cmd_pr >= B->need)
+				{
+					O.second->cmd_pr = 0;
+
+					switch (B->type)
+					{
+					case CommandType::Move:
+						O.second->location = B->target_prov;
+						break;
+					case CommandType::Sieze:
+						m_gamedata->province.at(O.second->location)->ruler = O.second->owner;
+						break;
+					}
+					O.second->cmd.pop_front();
+				}
+				else
+				{
+					O.second->cmd_pr += 1;
+				}
+				if (O.second->selected) flag_update_leaders = true;
+
+
+			}
+			else
+			{
+				if (m_gamedata->province.at(O.second->location)->ruler != O.second->owner)
+				{
+					O.second->cmd.push_back(Command(CommandType::Sieze, O.second->location, 0, 60));
+				}
+			}
+
+		}
+
+		for (auto& N : m_gamedata->nations)
+		{
+			if (N.second->Ai)
+			{
+				for (auto& P : m_gamedata->province)
+				{
+					if (P.second->ruler == N.first && P.second->owner == N.first)
+					{
+						Act(L"Draft", { L"location", Str(P.first) });
+					}
+				}
+			}
+		}
+
+		if (flag_update_leaders)
+		{
+			UpdateArrow();
+			GUIUpdatePanelLeader();
+		}
+
+		std::this_thread::sleep_for(std::chrono::milliseconds(100));
+	}
+	OutputDebugStringA("End Thread\n");
+	return;
 }
 
 bool MyApp::Initialize()
@@ -683,6 +794,7 @@ void MyApp::BuildImage()
 	loadBitmap(LR"(Images\window.png)", L"Window");
 	loadBitmap(LR"(Images\window-highlight.png)", L"WindowHighlight");
 	loadBitmap(LR"(Images\button.png)", L"Button");
+	loadBitmap(LR"(Images\dark-button.png)", L"DarkButton");
 	loadBitmap(LR"(Images\flags\말갈.bmp)", L"말갈");
 	wchar_t buf[256];
 	for (const auto& O : m_gamedata->nations)
@@ -696,13 +808,18 @@ void MyApp::DrawUI()
 {
 	auto& g = m_d2d->d2dDeviceContext;
 
-	//if (mRadius < 64.f)
+	if (dragtype == DragType::Leader)
+	{
+		Draw_rect = { (float)dragx, (float)dragy, (float)mLastMousePos.x, (float)mLastMousePos.y };
+		g->DrawRectangle(Draw_rect, m_d2d->Brush[L"White"].Get(), 2.f);
+	}
 
 
 	g->DrawText(mUser.DebugText.c_str(), (UINT32)mUser.DebugText.length(),
 		m_d2d->textFormat[L"Debug"].Get(), D2D1::RectF(0.0f, 0.0f, mClientWidth / 3.f, 1.f * mClientHeight),
 		m_d2d->Brush[L"White"].Get());
 
+	draw_mutex.lock();
 	m_DrawItems->Sort();
 	for (auto& O : m_DrawItems->data)
 	{
@@ -808,6 +925,7 @@ void MyApp::DrawUI()
 			O[L"enable"] = L"disable";
 		}
 	}
+	draw_mutex.unlock();
 }
 void MyApp::Draw(const GameTimer& gt)
 {
@@ -1055,14 +1173,17 @@ void MyApp::GameInit()
 		백제->MainColor = XMFLOAT4(0.1f, 0.5f, 0.45f, 0.75f);
 		백제->MainName = L"백제";
 		m_gamedata->nations[++nation_count] = std::move(백제);
+		mUser.nationPick = nation_count;
 
 		std::unique_ptr<Nation> 고구려 = std::make_unique<Nation>();
 		고구려->MainColor = XMFLOAT4(0.4f, 0.0f, 0.0f, 0.75f);
 		고구려->MainName = L"고구려";
 		m_gamedata->nations[++nation_count] = std::move(고구려);
 	}
+	m_gamedata->nations.at(mUser.nationPick)->Ai = false;
 
 
+	draw_mutex.lock();
 	wchar_t buf[256];
 	for (const auto& O : m_gamedata->province)
 	{
@@ -1076,7 +1197,34 @@ void MyApp::GameInit()
 	}
 
 	
-	std::uint64_t EM = m_DrawItems->Insert(LR"(<img class="myForm" id="myForm0" src="Form" left="100" top="100" width="200" height="240" mousedown="FormHold" mouseup="FormUnhold" z-index="2">)");
+
+
+	m_DrawItems->Insert(LR"(<img src="신라" id="myNationFlag" left="81" top="80" width="132" height="132" z-index="9e-4" horizontal-align="center" vertical-align="center">)");
+	m_DrawItems->Insert(LR"(<img src="Window" left="0" top="0" width="161" height="160" z-index="10e-4">)");
+
+	//===================================================================================
+	std::uint64_t EM = m_DrawItems->Insert(LR"(<img class="myForm" id="myForm0" src="Form" left="200" top="200" width="400" height="480" mousedown="FormHold" mouseup="FormUnhold" z-index="2">)");
+
+	m_DrawItems->Insert(LR"(<a id="head" text="알 수 없음" left="26" top="60" width="348" height="48" z-index="1e-6" border="enable" pointer-events="none" color-g="0" color-r="0"  color-b="0">)", EM);
+	m_DrawItems->Insert(LR"(<a id="tail" text="영토 확인 메뉴" left="26" top="460" width="348" height="24" z-index="1e-6" border="enable" color-g="0" color-r="0"  color-b="0">)", EM);
+	m_DrawItems->Insert(LR"(<img id="flag" src="말갈" left="113" top="196" width="117" height="117" z-index="1e-6" horizontal-align="center" vertical-align="center">)", EM);
+	m_DrawItems->Insert(LR"(<img src="Window" left="40" top="124" width="144" height="144" z-index="1e-6">)", EM);
+
+	std::uint64_t EME = m_DrawItems->Insert(LR"(<div id="textContainer" src="Window" left="200" top="152" width="160" height="88" z-index="1e-6">)", EM);
+	m_DrawItems->Insert(LR"(<a id="text0" text="Window" left="0" top="-8" width="160" height="40" z-index="1e-6" border="enable" color-g="0" color-r="0"  color-b="0">)", EME);
+	m_DrawItems->Insert(LR"(<a id="text1" text="Window" left="0" top="36" width="160" height="24" z-index="1e-6" border="enable" color-g="0" color-r="0"  color-b="0">)", EME);
+	m_DrawItems->Insert(LR"(<a id="text2" text="Window" left="0" top="64" width="160" height="24" z-index="1e-6" border="enable" color-g="0" color-r="0"  color-b="0">)", EME);
+
+	std::uint64_t EMEE = m_DrawItems->Insert(LR"(<div id="buttonbar" src="Window" left="26" top="292" width="174" height="20" z-index="1e-6">)", EM);
+	std::uint64_t EMBT = m_DrawItems->Insert(LR"(<img id="button0" src="Button" left="2" top="0" width="112" height="40" z-index="1e-6">)", EMEE);
+	m_DrawItems->Insert(LR"(<a id="text" text="Window" left="0" top="6" width="112" height="30" z-index="1e-6" border="enable" color-g="0" color-r="0"  color-b="0">)", EMBT);
+	EMBT = m_DrawItems->Insert(LR"(<img id="button1" src="Button" left="118" top="0" width="112" height="40" z-index="1e-6">)", EMEE);
+	m_DrawItems->Insert(LR"(<a id="text" text="Window" left="0" top="6" width="112" height="30" z-index="1e-6" border="enable" color-g="0" color-r="0"  color-b="0">)", EMBT);
+	EMBT = m_DrawItems->Insert(LR"(<img id="button2" src="Button" left="234" top="0" width="112" height="40" z-index="1e-6">)", EMEE);
+	m_DrawItems->Insert(LR"(<a id="text" text="Window" left="0" top="6" width="112" height="30" z-index="1e-6" border="enable" color-g="0" color-r="0"  color-b="0">)", EMBT);
+
+
+	/*std::uint64_t EM = m_DrawItems->Insert(LR"(<img class="myForm" id="myForm0" src="Form" left="100" top="100" width="200" height="240" mousedown="FormHold" mouseup="FormUnhold" z-index="2">)");
 	m_DrawItems->Insert(LR"(<a id="head" text="알 수 없음" left="13" top="30" width="174" height="24" z-index="1e-6" border="enable" pointer-events="none" color-g="0" color-r="0"  color-b="0">)", EM);
 	m_DrawItems->Insert(LR"(<a id="tail" text="영토 확인 메뉴" left="13" top="226" width="174" height="12" z-index="1e-6" border="enable" color-g="0" color-r="0"  color-b="0">)", EM);
 
@@ -1094,13 +1242,18 @@ void MyApp::GameInit()
 	EMBT = m_DrawItems->Insert(LR"(<img id="button1" src="Button" left="59" top="0" width="56" height="20" z-index="1e-6">)", EMEE);
 	m_DrawItems->Insert(LR"(<a id="text" text="Window" left="0" top="3" width="56" height="15" z-index="1e-6" border="enable" color-g="0" color-r="0"  color-b="0">)", EMBT);
 	EMBT = m_DrawItems->Insert(LR"(<img id="button2" src="Button" left="117" top="0" width="56" height="20" z-index="1e-6">)", EMEE);
-	m_DrawItems->Insert(LR"(<a id="text" text="Window" left="0" top="3" width="56" height="15" z-index="1e-6" border="enable" color-g="0" color-r="0"  color-b="0">)", EMBT);
+	m_DrawItems->Insert(LR"(<a id="text" text="Window" left="0" top="3" width="56" height="15" z-index="1e-6" border="enable" color-g="0" color-r="0"  color-b="0">)", EMBT);*/
 
-	m_DrawItems->Insert(LR"(<img id="myDiv" src="Cursor" z-index="100000" left="0" top="0" width="40" height="40" pointer-events="none">)");
-	GameLoad();
+
+	m_DrawItems->Insert(LR"(<img id="myDiv" src="Cursor" z-index="1e5" left="0" top="0" width="40" height="40" pointer-events="none">)");
+	draw_mutex.unlock();
+	GameLoad(); 
+
+	trdGame = std::async(&MyApp::MainGame, this);
+	//trdGame.join();
 }
 
-void MyApp::Act(std::wstring func_name, std::initializer_list<std::wstring> args)
+bool MyApp::Act(std::wstring func_name, std::initializer_list<std::wstring> args, bool need_return)
 {
 	std::unordered_map<std::wstring, std::wstring> arg;
 	std::wstring head;
@@ -1113,43 +1266,73 @@ void MyApp::Act(std::wstring func_name, std::initializer_list<std::wstring> args
 	}
 
 	if (func_name == L"Draft")
-	{
+	{	
 		ProvinceId id = std::stoull(arg[L"location"]);
 		auto prov = m_gamedata->province.find(id);
+		if (prov->second->man >= 1000)
+		{
+			if (need_return)
+			{
+				return true;
+			}
 
-		wchar_t buf[256];
-		swprintf_s(buf, LR"(<img id="leader%llu" src="Window" enable="disable" pointer-events="none" gamedata-leaderid="%llu">)", m_gamedata->leader_progress, m_gamedata->leader_progress);
-		std::uint64_t EM = m_DrawItems->Insert(buf);
-		std::wstring nation_name = L"말갈";
-		if (auto N = m_gamedata->nations.find(prov->second->owner); N != m_gamedata->nations.end())
-			nation_name = N->second->MainName;
-		swprintf_s(buf, LR"(<img id="flag" src="%ls" enable="disable" mousedown="SelectLeader">)", nation_name.c_str());
-		m_gamedata->leaders.insert(std::make_pair(m_gamedata->leader_progress++, std::make_unique<Leader>(m_gamedata->NewLeader(id, prov->second->owner))));
-		m_DrawItems->Insert(buf, EM);
+			prov->second->man -= 1000;
+
+			wchar_t buf[256];
+			draw_mutex.lock();
+			swprintf_s(buf, LR"(<img id="leader%llu" src="Window" enable="disable" pointer-events="none" gamedata-leaderid="%llu">)", m_gamedata->leader_progress, m_gamedata->leader_progress);
+			std::uint64_t EM = m_DrawItems->Insert(buf);
+			std::wstring nation_name = L"말갈";
+			if (auto N = m_gamedata->nations.find(prov->second->owner); N != m_gamedata->nations.end())
+				nation_name = N->second->MainName;
+			if (prov->second->owner == mUser.nationPick)
+				swprintf_s(buf, LR"(<img id="flag" src="%ls" enable="disable" mousedown="SelectLeader">)", nation_name.c_str());
+			else
+				swprintf_s(buf, LR"(<img id="flag" src="%ls" enable="disable">)", nation_name.c_str());
+			m_gamedata->leaders.insert(std::make_pair(m_gamedata->leader_progress++, std::make_unique<Leader>(m_gamedata->NewLeader(id, prov->second->owner, 1000))));
+			m_DrawItems->Insert(buf, EM);
+			draw_mutex.unlock();
+		}
 	}
+	return false;
 }
 
-void MyApp::GUIUpdatePanelLeader(LeaderId leader_id = 0)
+
+void MyApp::GUIUpdatePanelLeader(LeaderId leader_id)
 {
 	if (leader_id == 0)
-		leader_id = last_leader_id;
+		leader_id = m_gamedata->last_leader_id;	
 	else
-		last_leader_id = leader_id;
+		m_gamedata->last_leader_id = leader_id;
+	m_gamedata->last_prov_id = 0;
 	std::wstring nation_name = L"알 수 없음";
 	std::wstring present_com = L"알 수 없음";
 	std::wstring progress = L"알 수 없음";
 	LeaderId leader = leader_id;
+	std::wstring head = L"LeaderId : " + Str(leader_id);
 	if (auto Q = m_gamedata->leaders.find(leader); Q != m_gamedata->leaders.end())
 	{
+		head.resize(256);
+		swprintf_s(head.data(), 256, L"%llu번째 군대 %lld명", leader_id, Q->second->size);
+
 		if (Q->second->selected)
 		{
 			if (Q->second->cmd.size() > 0)
 			{
+				float sum = 0;
 				auto R = Q->second->cmd.cbegin();
-				if (R->type == CommandType::Move)
+				switch (R->type)
 				{
+				case CommandType::Move:
 					present_com = m_gamedata->province.at(R->target_prov)->name + L"로 이동중";
-					progress = Str((int)m_gamedata->province_connect.at(std::make_pair(Q->second->location, R->target_prov))) + L"리";
+					
+					std::for_each(Q->second->cmd.begin(), Q->second->cmd.end(), [&S = sum](std::list<Command>::const_reference O) { S += O.need; });
+					progress = Str((int)Q->second->cmd_pr) + L" / " + Str((int)R->need) + L"일 : 총( " + Str((int)sum) + L")";
+					break;
+				case CommandType::Sieze:
+					present_com = m_gamedata->province.at(R->target_prov)->name + L"를 공성중";
+					progress = Str((int)Q->second->cmd_pr) + L" / " + Str((int)R->need) + L"일 뒤에 공성";
+					break;
 				}
 
 			}
@@ -1182,7 +1365,7 @@ void MyApp::GUIUpdatePanelLeader(LeaderId leader_id = 0)
 		});
 	m_DrawItems->$(L".myForm #head").css(
 		{
-			L"text", L"LeaderId : " + Str(leader_id)
+			L"text", head
 		});
 	m_DrawItems->$(L".myForm #tail").css(
 		{
@@ -1212,6 +1395,12 @@ void MyApp::GUIUpdatePanelLeader(LeaderId leader_id = 0)
 
 void MyApp::GUIUpdatePanelProvince(ProvinceId prov_id)
 {
+	if (prov_id == 0)
+		prov_id = m_gamedata->last_prov_id;
+	else
+		m_gamedata->last_prov_id = prov_id;
+	m_gamedata->last_leader_id = 0;
+
 	auto prov = m_gamedata->province.find(prov_id);
 	if (prov == m_gamedata->province.end())
 		return;
@@ -1233,7 +1422,7 @@ void MyApp::GUIUpdatePanelProvince(ProvinceId prov_id)
 		});
 	m_DrawItems->$(L".myForm #textContainer text1").css(
 		{
-			L"text", L"알 수 없음"
+			L"text", L"예비군 : " + Str(prov->second->man)
 		});
 	m_DrawItems->$(L".myForm #head").css(
 		{
@@ -1247,12 +1436,30 @@ void MyApp::GUIUpdatePanelProvince(ProvinceId prov_id)
 		{
 			L"text", L"알 수 없음"
 		});
-
-	m_DrawItems->$(L".myForm #buttonbar button0 text").css(
-		{
-			L"text", L"병사 소집",
-			L"mousedown", L"DraftForP3"
-		});
+	if (Act(L"Draft", {L"location", Str(prov->first)}, true))
+	{
+		m_DrawItems->$(L".myForm #buttonbar button0").css(
+			{
+				L"src", L"Button",
+			});
+		m_DrawItems->$(L".myForm #buttonbar button0 text").css(
+			{
+				L"text", L"병사 소집",
+				L"mousedown", L"DraftForP3"
+			});
+	}
+	else
+	{
+		m_DrawItems->$(L".myForm #buttonbar button0").css(
+			{
+				L"src", L"DarkButton",
+			});
+		m_DrawItems->$(L".myForm #buttonbar button0 text").css(
+			{
+				L"text", L"병사 소집",
+				L"mousedown", L""
+			});
+	}
 	m_DrawItems->$(L".myForm #buttonbar button1 text").css(
 		{
 			L"text", L"잠김",
@@ -1291,8 +1498,9 @@ void MyApp::Execute(const std::wstring& func_name, const std::uint64_t& uuid)
 		}
 		else if (func_name == L"SelectLeader")
 		{
+			game_contype = GameControlType::Leader;
 			auto P = (*m_DrawItems->$(Str(uuid) + L" ..").begin());
-			
+			bool is_select = false;
 			LeaderId leader = std::stoull((*P)[L"gamedata-leaderid"]);
 
 			for (auto& Q : m_gamedata->leaders)
@@ -1307,6 +1515,7 @@ void MyApp::Execute(const std::wstring& func_name, const std::uint64_t& uuid)
 								L"src", L"WindowHighlight"
 							}
 						);
+						is_select = true;
 					}
 					else
 					{
@@ -1317,7 +1526,7 @@ void MyApp::Execute(const std::wstring& func_name, const std::uint64_t& uuid)
 						);
 					}
 				}
-				else if (Q.second->selected && !GetAsyncKeyState(VK_LSHIFT))
+				else if (Q.second->selected && !GetAsyncKeyState(VK_LCONTROL))
 				{
 					m_DrawItems->$(L"#leader" + Str(Q.first)).css(
 						{
@@ -1325,16 +1534,26 @@ void MyApp::Execute(const std::wstring& func_name, const std::uint64_t& uuid)
 						}
 					);
 					Q.second->selected = false;
-
 				}
 			}
-			GUIUpdatePanelLeader(leader);
+
+			if (is_select)
+			{
+				UpdateArrow();
+				GUIUpdatePanelLeader(leader);
+			}
 		}
 	}
 }
 
 void MyApp::GameUpdate()
 {
+
+
+	m_DrawItems->$(L"#myNationFlag").css({
+		L"src", m_gamedata->nations.at(mUser.nationPick)->MainName
+		});
+
 	m_DrawItems->$(L"#myDiv").css({
 		L"left", Str(mLastMousePos.x),
 		L"top", Str(mLastMousePos.y)
@@ -1540,6 +1759,12 @@ void MyApp::GameUpdate()
 
 void MyApp::GameClose()
 {
+	m_gamedata->run = false;
+	
+	////std::this_thread::sleep_for(std::chrono::seconds(1));
+	//trdGame.join()
+	//trdGame.w;
+
 	for (auto& O : mBitmap)
 		DeleteObject(O.second);
 	log_main.close();
@@ -1548,18 +1773,145 @@ void MyApp::GameClose()
 	m_d2d.reset();
 }
 
+void MyApp::InsertArrow(const ProvinceId& start, ProvincePath& path, bool clear)
+{
+	
+
+	std::vector<XMFLOAT3> buf0, buf1;
+	
+	if (path.path.size() == 0) return;
+
+	auto S = m_gamedata->province.at(start)->on3Dpos;
+	auto E = m_gamedata->province.at(*path.path.rbegin())->on3Dpos;
+
+	buf0.push_back({ S.x / 2, S.y / 2 + 1.f, S.z / 2 });
+	for (auto Q : path)
+	{
+		auto pos = m_gamedata->province.at(Q)->on3Dpos;
+		buf0.push_back({ pos.x / 2, pos.y / 2 + 1.f, pos.z / 2 });
+	}
+	
+	//buf0.push_back({ E.x / 2, E.y / 2 + 1.f, E.z / 2 });
+
+	/*XMVECTOR v = XMLoadFloat3(new XMFLOAT3((E.x - S.x) / 2, 0.f, (E.z - S.z) / 2));
+
+	v = XMVector2Orthogonal(v);
+	v = XMVector2Normalize(v);
+
+	XMFLOAT2 F;
+
+	XMStoreFloat2(&F, v);
+*/
+	
+
+
+	for (float length = sqrtf(powf((S.x - E.x) / 2, 2) + powf((S.y - E.y) / 2, 2)); length > 1; length /= 2)
+	{
+		buf1.clear();
+		for (int i = 0; i < buf0.size() - 1; ++i)
+		{
+			buf1.push_back(buf0.at(i));
+			buf1.push_back({ (buf0.at(i).x + buf0.at(i + 1).x) / 2,(buf0.at(i).y + buf0.at(i + 1).y) / 2, (buf0.at(i).z + buf0.at(i + 1).z) / 2 });
+		}
+		buf1.push_back(buf0.at(buf0.size() - 1));
+		buf0.swap(buf1);
+	}
+
+
+	if (clear) 
+	{
+		mArrows.vertices.clear();
+		mArrows.indices.clear();
+	} 
+
+	mArrows.points.clear();
+	//float center = (buf0.size() - 1) / 2.f;
+	for (int i = 0; i < buf0.size(); ++i)
+	{
+		float ox = 1.f * buf0.at(i).x + (map_w - 1.f) / 2.f, oy = 1.f * buf0.at(i).z + (map_h - 1.f) / 2.f;
+		int x = (int)floorf(ox);
+		int y = (int)floorf(oy);
+		ox -= x;
+		oy -= y;
+
+		if (x >= 0 && x < map_w - 1 && y >= 0 && y < map_h - 1)
+		{
+			//buf0.at(i).y = mLandVertices.at(x + map_w * y).Pos.y;
+
+			float s0_0 = mLandVertices.at(x + map_w * y).Pos.y;
+			float s0_1 = mLandVertices.at(x + map_w * (y + 1)).Pos.y;
+			float s1_0 = mLandVertices.at(x + 1 + map_w * y).Pos.y;
+			float s1_1 = mLandVertices.at(x + 1 + map_w * (y + 1)).Pos.y;
+
+			buf0.at(i).y = s0_0 * (1 - ox) * (1 - oy) +
+				s0_1 * (1 - ox) * oy +
+				s1_0 * ox * (1 - oy) +
+				s1_1 * ox * oy;
+
+		}
+		//buf0.at(i).x += 5 * F.x * (1 - powf((center - i) / center, 2));
+		//buf0.at(i).y += 5 * F.y * (1 - powf((center - i) / center, 2));
+
+
+		mArrows.points.push_back(buf0.at(i));
+	}
+
+	mArrows.BuildLine();
+
+}
+
+void MyApp::UpdateArrow()
+{
+	mArrows.vertices.clear();
+	mArrows.indices.clear();
+	for (auto& Q : m_gamedata->leaders)
+	{
+		if (Q.second->selected)
+		{
+			ProvinceId lastLoc = Q.second->location;
+			ProvincePath path;
+
+			for (auto C : Q.second->cmd)
+			{
+				if (C.type == CommandType::Move)
+				{
+					lastLoc = C.target_prov;
+					path.path.push_back(lastLoc);
+				}
+			}
+			InsertArrow(Q.second->location, path, false);
+		}
+	}
+}
+
 void MyApp::ProvinceMousedown(WPARAM btnState, ProvinceId id)
 {
 	auto prov = m_gamedata->province.find(id);
 	if (prov == m_gamedata->province.end())
+	{
+		if (btnState & MK_LBUTTON)
+		{
+			game_contype = GameControlType::View;
+		}
+		else if (btnState & MK_RBUTTON)
+		{
+			if (m_gamedata->last_leader_id > 0)
+			{
+				game_contype = GameControlType::Leader;
+			}
+		}
 		return;
+	}
 	captions[L"선택한 프로빈스"] = std::to_wstring(id);
 	captions[L"선택한 프로빈스.x"] = std::to_wstring(2.f * prov->second->on3Dpos.x / prov->second->p_num);
 	captions[L"선택한 프로빈스.z"] = std::to_wstring(2.f * prov->second->on3Dpos.z / prov->second->p_num);
 
+
+
 	if (btnState & MK_LBUTTON)
 	{
-
+		mArrows.vertices.clear();
+		mArrows.indices.clear();
 		for (auto& O : m_gamedata->leaders)
 		{
 			if (O.second->selected)
@@ -1573,6 +1925,7 @@ void MyApp::ProvinceMousedown(WPARAM btnState, ProvinceId id)
 			}
 		}
 		GUIUpdatePanelProvince(id);
+		game_contype = GameControlType::View;
 		/*if (prov->second->owner == 0)
 		{
 			prov->second->ruler = mUser.nationPick;
@@ -1601,21 +1954,41 @@ void MyApp::ProvinceMousedown(WPARAM btnState, ProvinceId id)
 	}
 	else if (btnState & MK_RBUTTON)
 	{
-		if (last_leader_id > 0)
+		if (m_gamedata->last_leader_id > 0)
 		{
+			game_contype = GameControlType::Leader;
+			mArrows.vertices.clear();
+			mArrows.indices.clear();
 			for (auto& O : m_gamedata->leaders)
 			{
 				if (O.second->selected)
 				{
-					O.second->cmd.clear();
-					for (auto P : ProvincePath(m_gamedata->province, m_gamedata->province_connect, O.second->location, id))
+					if (O.second->location == id)
 					{
-						O.second->cmd.push_back(Command(CommandType::Move, P));
+						O.second->cmd_pr = 0;
+						O.second->cmd.clear();
 					}
+					else
+					{
+						auto path = ProvincePath(m_gamedata->province, m_gamedata->province_connect, O.second->location, id);
 
+						if (path.path.size() > 0)
+						{
+							O.second->cmd_pr = 0;
+							O.second->cmd.clear();
+							ProvinceId lastLoc = O.second->location;
+							for (auto P : path)
+							{
+								O.second->cmd.push_back(Command(CommandType::Move, P, 0, m_gamedata->province_connect.at(std::make_pair(lastLoc, P))));
+								lastLoc = P;
+							}
+						}
+					}
+					
 				}
 			}
 			GUIUpdatePanelLeader();
+			UpdateArrow();
 		}
 	}
 	else if (btnState & MK_MBUTTON)
@@ -1641,22 +2014,65 @@ void MyApp::OnKeyDown(WPARAM btnState)
 	//bool pressAlt = !keyState.at(VK_MENU);
 	bool pressShift = GetAsyncKeyState(VK_LSHIFT) != 0;
 	//bool pressCtrl = !keyState.at(VK_CONTROL);
+	
+	switch (game_contype)
+	{
+	case GameControlType::Leader:
+		if (keyState.at('A'))
+		{
+			mEyeMoveX -= pressShift ? 0.48f : 0.24f * mRadius * deltaTime;
+		}
+		if (keyState.at('D'))
+		{
+			mEyeMoveX += pressShift ? 0.48f : 0.24f * mRadius * deltaTime;
+		}
+		if (keyState.at('W'))
+		{
+			mEyeMoveZ += pressShift ? 0.48f : 0.24f * mRadius * deltaTime;
+		}
+		if (keyState.at('S'))
+		{
+			mEyeMoveZ -= pressShift ? 0.48f : 0.24f * mRadius * deltaTime;
+		}
 
-	if (keyState.at('A'))
-	{
-		mEyeMoveX -= pressShift ? 0.48f : 0.24f * mRadius * deltaTime;
-	}
-	if (keyState.at('D'))
-	{
-		mEyeMoveX += pressShift ? 0.48f : 0.24f * mRadius * deltaTime;
-	}
-	if (keyState.at('W'))
-	{
-		mEyeMoveZ += pressShift ? 0.48f : 0.24f * mRadius * deltaTime;
-	}
-	if (keyState.at('S'))
-	{
-		mEyeMoveZ -= pressShift ? 0.48f : 0.24f * mRadius * deltaTime;
+		if (keyState.at('E'))
+		{
+			for (auto& P : m_gamedata->leaders)
+			{
+				if (P.second->selected)
+				{
+					P.second->selected = false;
+
+					m_DrawItems->$(L"#leader" + Str(P.first)).css(
+						{
+							L"src", L"Window"
+						}
+					);
+					break;
+				}
+			}
+			GUIUpdatePanelLeader();
+			UpdateArrow();			
+		}
+		break;
+	default:
+		if (keyState.at('A'))
+		{
+			mEyeMoveX -= pressShift ? 0.48f : 0.24f * mRadius * deltaTime;
+		}
+		if (keyState.at('D'))
+		{
+			mEyeMoveX += pressShift ? 0.48f : 0.24f * mRadius * deltaTime;
+		}
+		if (keyState.at('W'))
+		{
+			mEyeMoveZ += pressShift ? 0.48f : 0.24f * mRadius * deltaTime;
+		}
+		if (keyState.at('S'))
+		{
+			mEyeMoveZ -= pressShift ? 0.48f : 0.24f * mRadius * deltaTime;
+		}
+		break;
 	}
 
 	switch (btnState)
@@ -1921,6 +2337,7 @@ void MyApp::OnMouseDown(WPARAM btnState, int x, int y)
 	mLastMousePos.x = x;
 	mLastMousePos.y = y;
 
+
 	if (auto O = MouseOnUI(x, y); O != m_DrawItems->data.rend())
 	{
 		Execute((*O)[L"mousedown"], O->uuid);
@@ -1928,8 +2345,19 @@ void MyApp::OnMouseDown(WPARAM btnState, int x, int y)
 	}
 	else
 	{
+		dragx = x;
+		dragy = y;
 		focus = 0;
-		Pick(btnState, x, y);
+		if (GetAsyncKeyState(VK_LSHIFT))
+		{
+			dragtype = DragType::Leader;
+		}
+		else
+		{
+			game_contype = GameControlType::View;
+			dragtype = DragType::View;
+			Pick(btnState, x, y);
+		}
 	}
 
 	SetCapture(mhMainWnd);
@@ -2011,9 +2439,95 @@ void MyApp::Pick(WPARAM btnState, int sx, int sy)
 }
 void MyApp::OnMouseUp(WPARAM btnState, int x, int y)
 {
-	if (auto O = MouseOnUI(x, y); O != m_DrawItems->data.rend())
+	bool flag = false;
+	if (x > dragx)
 	{
-		Execute((*O)[L"mouseup"], O->uuid);
+		Draw_rect.left = (float)dragx;
+		Draw_rect.right = (float)x;
+	}
+	else
+	{
+		Draw_rect.left = (float)x;
+		Draw_rect.right = (float)dragx;
+	}
+	if (y > dragy)
+	{
+		Draw_rect.top = (float)dragy;
+		Draw_rect.bottom = (float)y;
+	}
+	else
+	{
+		Draw_rect.top = (float)y;
+		Draw_rect.bottom = (float)dragy;
+	}
+	switch (dragtype)
+	{
+	case DragType::View:
+		dragtype = DragType::None;
+		break;
+	case DragType::Leader:
+		if (!GetAsyncKeyState(VK_LCONTROL))
+		{
+			for (auto& L : m_gamedata->leaders)
+			{
+				if (L.second->selected)
+				{
+					m_DrawItems->$(L"#leader" + Str(L.first)).css(
+						{
+							L"src", L"Window"
+						}
+					);
+					L.second->selected = false;
+				}
+			}
+		}
+		for (const auto& O : m_gamedata->province)
+		{
+			if (!O.second->p_num)
+			{
+				continue;
+			}
+
+			XMFLOAT3 pos = O.second->on3Dpos;
+			pos.x /= 2.f;
+			pos.y /= 2.f;
+			pos.z /= 2.f;
+			XMFLOAT3 s = Convert3Dto2D(XMLoadFloat3(&pos));
+
+			float w = mClientHeight / 20.f * O.second->name.length() + 10.f;
+			float h = mClientHeight / 15.f;
+			float size = 25.0f / s.z;
+			float depth = (s.z - 1.f) / (1000.f - 1.f);
+			if (s.z >= 1.f && s.z <= 1000.0f)
+			{
+				if (Draw_rect.left <= s.x && s.x <= Draw_rect.right && Draw_rect.top <= s.y && s.y <= Draw_rect.bottom)
+				{
+					for (auto& L : m_gamedata->leaders)
+					{
+						if (L.second->location == O.first)
+						{
+							m_DrawItems->$(L"#leader" + Str(L.first)).css(
+								{
+									L"src", L"WindowHighlight"
+								}
+							);
+							L.second->selected = true;
+							flag = true;
+							m_gamedata->last_leader_id = L.first;
+						}
+					}
+				}
+			}
+		}
+		if (flag) { GUIUpdatePanelLeader(); game_contype = GameControlType::Leader; };
+		dragtype = DragType::None;
+		break;
+	default:
+		if (auto O = MouseOnUI(x, y); O != m_DrawItems->data.rend())
+		{
+			Execute((*O)[L"mouseup"], O->uuid);
+		}
+		break;
 	}
 
 	ReleaseCapture();
@@ -2021,6 +2535,7 @@ void MyApp::OnMouseUp(WPARAM btnState, int x, int y)
 
 std::list<YTML::DrawItem>::reverse_iterator MyApp::MouseOnUI(int x, int y)
 {
+	draw_mutex.lock();
 	for (auto O = m_DrawItems->data.rbegin(); O != m_DrawItems->data.rend(); ++O)
 	{
 		if ((*O)[L"enable"] == L"disable")
@@ -2069,17 +2584,22 @@ std::list<YTML::DrawItem>::reverse_iterator MyApp::MouseOnUI(int x, int y)
 		if (Draw_rect.left <= x && Draw_rect.right >= x &&
 			Draw_rect.top <= y && Draw_rect.bottom >= y && (*O)[L"pointer-events"] != L"none")
 		{
+			draw_mutex.unlock();
 			return O;
 		}
 	}
+	draw_mutex.unlock();
 	return m_DrawItems->data.rend();
 }
 
 void MyApp::OnMouseMove(WPARAM btnState, int x, int y)
 {
 
-	if (focus == 0)
+	switch (dragtype)
 	{
+	case DragType::Leader:
+		break;
+	case DragType::View:
 		if ((btnState & MK_LBUTTON) != 0)
 		{
 			float dx = XMConvertToRadians(0.25f*static_cast<float>(x - mLastMousePos.x));
@@ -2111,7 +2631,7 @@ void MyApp::OnMouseMove(WPARAM btnState, int x, int y)
 			// Restrict the radius.
 			mRadius = MathHelper::Clamp(mRadius, 10.0f, 240.0f);
 		}
-
+		break;
 	}
 	mLastMousePos.x = x;
 	mLastMousePos.y = y;
@@ -2276,19 +2796,29 @@ void MyApp::UpdateWaves(const GameTimer& gt)
 
 	mWavesRitem->Geo->VertexBufferGPU = currWavesVB->Resource();
 
-	/*auto currArrowsVB = mCurrFrameResource->WavesVB.get();
+	auto currArrowsVB = mCurrFrameResource->ArrowsVB.get();
 	for (int i = 0; i < mArrows.vertices.size(); ++i)
 	{
-		Vertex v;
-
-		v.Pos = mArrows.vertices.at(i).Pos;
-		v.Normal = mArrows.vertices.at(i).Normal;
-
-		v.TexC = mArrows.vertices.at(i).TexC;
-
+		Vertex v = mArrows.vertices.at(i);
 		currArrowsVB->CopyData(i, v);
 	}
-	mArrowRitem->Geo->VertexBufferGPU = currArrowsVB->Resource();*/
+
+	mArrowsRitem->Geo->VertexBufferGPU = currArrowsVB->Resource();
+
+
+
+	auto currArrowsIB = mCurrFrameResource->ArrowsIB.get();
+	for (int i = 0; i < mArrows.indices.size(); ++i)
+	{
+		currArrowsIB->CopyData(i, mArrows.indices.at(i));
+	}
+	mArrowsRitem->IndexCount = static_cast<UINT>(mArrows.indices.size());
+	if (mArrowsRitem->IndexCount == 0)
+		mArrowsRitem->Visible = false;
+	else
+		mArrowsRitem->Visible = true;
+
+	mArrowsRitem->Geo->IndexBufferGPU = currArrowsIB->Resource();
 
 }
 
@@ -2818,21 +3348,21 @@ void MyApp::BuildArrowGeometry()
 	//std::vector<std::uint16_t> indices(3 * mWaves->TriangleCount()); // 3 indices per face
 
 
-	std::vector<Vertex> vertices = mArrows.vertices;
-	std::vector<std::uint16_t> indices = mArrows.indices;
+	std::vector<Vertex> vertices(0x8000);// = mArrows.vertices;
+	std::vector<std::uint16_t> indices(0x8000);//; = mArrows.indices;
 
 	XMFLOAT3 vMinf3(+MathHelper::Infinity, +MathHelper::Infinity, +MathHelper::Infinity);
 	XMFLOAT3 vMaxf3(-MathHelper::Infinity, -MathHelper::Infinity, -MathHelper::Infinity);
 
-	XMVECTOR vMin = XMLoadFloat3(&vMinf3);
-	XMVECTOR vMax = XMLoadFloat3(&vMaxf3);
+	//XMVECTOR vMin = XMLoadFloat3(&vMinf3);
+	//XMVECTOR vMax = XMLoadFloat3(&vMaxf3);
 
-	for (size_t i = 0; i < vertices.size(); ++i)
+	/*for (size_t i = 0; i < vertices.size(); ++i)
 	{
 		XMVECTOR P = XMLoadFloat3(&vertices[i].Pos);
 		vMin = XMVectorMin(vMin, P);
 		vMax = XMVectorMax(vMax, P);
-	}
+	}*/
 
 	const UINT vbByteSize = (UINT)vertices.size() * sizeof(Vertex);
 	const UINT ibByteSize = (UINT)indices.size() * sizeof(std::uint16_t);
@@ -2846,26 +3376,32 @@ void MyApp::BuildArrowGeometry()
 	ThrowIfFailed(D3DCreateBlob(ibByteSize, &geo->IndexBufferCPU));
 	CopyMemory(geo->IndexBufferCPU->GetBufferPointer(), indices.data(), ibByteSize);
 
-	geo->VertexBufferGPU = d3dUtil::CreateDefaultBuffer(md3dDevice.Get(),
-		mCommandList.Get(), vertices.data(), vbByteSize, geo->VertexBufferUploader);
+	geo->VertexBufferCPU = nullptr;
+	geo->VertexBufferGPU = nullptr;
 
-	geo->IndexBufferGPU = d3dUtil::CreateDefaultBuffer(md3dDevice.Get(),
-		mCommandList.Get(), indices.data(), ibByteSize, geo->IndexBufferUploader);
+	/*geo->VertexBufferGPU = d3dUtil::CreateDefaultBuffer(md3dDevice.Get(),
+		mCommandList.Get(), vertices.data(), vbByteSize, geo->VertexBufferUploader);*/
+
+	geo->IndexBufferCPU = nullptr;
+	geo->IndexBufferGPU = nullptr;
+
+	//geo->IndexBufferGPU = d3dUtil::CreateDefaultBuffer(md3dDevice.Get(),
+	//	mCommandList.Get(), indices.data(), ibByteSize, geo->IndexBufferUploader);
 
 	geo->VertexByteStride = sizeof(Vertex);
 	geo->VertexBufferByteSize = vbByteSize;
 	geo->IndexFormat = DXGI_FORMAT_R16_UINT;
 	geo->IndexBufferByteSize = ibByteSize;
 	
-	BoundingBox bounds;
-	DirectX::XMStoreFloat3(&bounds.Center, 0.5f*(vMin + vMax));
-	DirectX::XMStoreFloat3(&bounds.Extents, 0.5f*(vMax - vMin));
+	//BoundingBox bounds;
+	//DirectX::XMStoreFloat3(&bounds.Center, 0.5f*(vMin + vMax));
+	//DirectX::XMStoreFloat3(&bounds.Extents, 0.5f*(vMax - vMin));
 
 	SubmeshGeometry submesh;
 	submesh.IndexCount = (UINT)indices.size();
 	submesh.StartIndexLocation = 0;
 	submesh.BaseVertexLocation = 0;
-	submesh.Bounds = bounds;
+	//submesh.Bounds = bounds;
 
 	geo->DrawArgs["arrow"] = submesh;
 
@@ -3035,7 +3571,7 @@ void MyApp::BuildFrameResources()
 	for (int i = 0; i < gNumFrameResources; ++i)
 	{
 		mFrameResources.push_back(std::make_unique<FrameResource>(md3dDevice.Get(),
-			1, (UINT)mAllRitems.size(), (UINT)mMaterials.size(), mWaves->VertexCount(), mArrows.vertices.size()));
+			1, (UINT)mAllRitems.size(), (UINT)mMaterials.size(), mWaves->VertexCount()));
 	}
 }
 
@@ -3071,7 +3607,7 @@ void MyApp::BuildMaterials()
 	arrow->Name = "arrow";
 	arrow->MatCBIndex = 3;
 	arrow->DiffuseSrvHeapIndex = 3;
-	arrow->DiffuseAlbedo = XMFLOAT4(1.0f, 0.5f, 0.3f, 1.0f);
+	arrow->DiffuseAlbedo = XMFLOAT4(0.8f, 1.0f, 1.0f, 1.0f);
 	arrow->FresnelR0 = XMFLOAT3(1.f, 1.f, 1.f);
 	arrow->Roughness = 0.5f;
 
@@ -3104,17 +3640,22 @@ void MyApp::BuildRenderItems()
 
 	auto arrowRitem = std::make_unique<RenderItem>();
 	arrowRitem->World = MathHelper::Identity4x4();
-	XMStoreFloat4x4(&arrowRitem->World, XMMatrixScaling(1.0f, 1.0f, 1.0f) + XMMatrixTranslation(0,3,0));
 	//XMStoreFloat4x4(&arrowRitem->TexTransform, XMMatrixScaling(5.0f, 5.0f, 1.0f));
+	XMStoreFloat4x4(&arrowRitem->World, XMMatrixTranslation(0.0f, 0.0f, 0.0f));
 	arrowRitem->ObjCBIndex = all_CBIndex++;
+#if 1
 	arrowRitem->PrimitiveType = D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+#else
+	arrowRitem->PrimitiveType = D3D11_PRIMITIVE_TOPOLOGY_LINESTRIP;
+#endif
 	arrowRitem->Mat = mMaterials["arrow"].get();
 	arrowRitem->Geo = mGeometries["arrowGeo"].get();
     arrowRitem->Bounds = arrowRitem->Geo->DrawArgs["arrow"].Bounds;
 	arrowRitem->IndexCount = arrowRitem->Geo->DrawArgs["arrow"].IndexCount;
 	arrowRitem->StartIndexLocation = arrowRitem->Geo->DrawArgs["arrow"].StartIndexLocation;
 	arrowRitem->BaseVertexLocation = arrowRitem->Geo->DrawArgs["arrow"].BaseVertexLocation;
-	   
+	
+	mArrowsRitem = arrowRitem.get();
 
 	mRitemLayer[(int)RenderLayer::Transparent].push_back(arrowRitem.get());
 	mAllRitems.push_back(std::move(arrowRitem));

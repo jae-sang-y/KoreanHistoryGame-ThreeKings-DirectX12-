@@ -72,7 +72,7 @@ struct FrameResource
 {
 public:
     
-    FrameResource(ID3D12Device* device, UINT passCount, UINT objectCount, UINT materialCount, UINT waveVertCount, UINT arrowVertCount);
+    FrameResource(ID3D12Device* device, UINT passCount, UINT objectCount, UINT materialCount, UINT waveVertCount);
     FrameResource(const FrameResource& rhs) = delete;
     FrameResource& operator=(const FrameResource& rhs) = delete;
     ~FrameResource();
@@ -91,7 +91,9 @@ public:
     // We cannot update a dynamic vertex buffer until the GPU is done processing
     // the commands that reference it.  So each frame needs their own.
     std::unique_ptr<UploadBuffer<Vertex>> WavesVB = nullptr;
-	std::unique_ptr<UploadBuffer<std::uint16_t>> WavesIB = nullptr;
+
+	std::unique_ptr<UploadBuffer<Vertex>> ArrowsVB = nullptr;
+	std::unique_ptr<UploadBuffer<std::uint16_t>> ArrowsIB = nullptr;
 	std::unique_ptr<UploadBuffer<Vertex>> GndVB = nullptr;
 
 
