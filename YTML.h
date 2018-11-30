@@ -39,30 +39,152 @@ namespace YTML
 	private:
 		std::unordered_map<std::wstring, std::wstring> Attribute;
 	public:
+		std::unordered_set<std::wstring> Id, Class;
+		float inherit_z_index = 0;
+		float z_index = 0;
+		bool background = false;
+		bool border = false;
+		bool enable = true;
+		float background_color_r = 1;
+		float background_color_g = 1;
+		float background_color_b = 1;
+		float color_r = 1;
+		float color_g = 0;
+		float color_b = 1;
+		float left = 0;
+		float top = 0;
+		float inherit_left = 0;
+		float inherit_top = 0;
+		float width = 32;
+		float height = 32;
+		float opacity = 1;
+
+		void SetAttribute(const std::wstring& Left, const std::wstring& Right)
+		{
+			if (Left == L"inherit-z-index")
+			{
+				inherit_z_index = std::stof(Right);
+			}
+			else if (Left == L"z-index")
+			{
+				z_index = std::stof(Right);
+			}
+			else if (Left == L"background-color-r")
+			{
+				background_color_r = std::stof(Right);
+			}
+			else if (Left == L"background-color-g")
+			{
+				background_color_g = std::stof(Right);
+			}
+			else if (Left == L"background-color-b")
+			{
+				background_color_b = std::stof(Right);
+			}
+			else if (Left == L"color-r")
+			{
+				color_r = std::stof(Right);
+			}
+			else if (Left == L"color-g")
+			{
+				color_g = std::stof(Right);
+			}
+			else if (Left == L"color-b")
+			{
+				color_b = std::stof(Right);
+			}
+			else if (Left == L"left")
+			{
+				left = std::stof(Right);
+			}
+			else if (Left == L"top")
+			{
+				top = std::stof(Right);
+			}
+			else if (Left == L"inherit-left")
+			{
+				inherit_left = std::stof(Right);
+			}
+			else if (Left == L"inherit-top")
+			{
+				inherit_top = std::stof(Right);
+			}
+			else if (Left == L"width")
+			{
+				width = std::stof(Right);
+			}
+			else if (Left == L"height")
+			{
+				height = std::stof(Right);
+			}
+			else if (Left == L"opacity")
+			{
+				opacity = std::stof(Right);
+			}
+			else if (Left == L"background")
+			{
+				background = Right != L"disable";
+			}
+			else if (Left == L"color-hex")
+			{
+				std::wstringstream st;
+				st << std::hex << Right;
+				unsigned int hex;
+				st >> hex;
+				st.clear();
+
+				color_r = hex % 0x100 / 255.f;
+				Attribute[L"color-r"] = Str(color_r);
+				color_g = hex / 0x100 % 0x100 / 255.f;
+				Attribute[L"color-g"] = Str(color_g);
+				color_b = hex / 0x10000 % 0x100 / 255.f;
+				Attribute[L"color-b"] = Str(color_b);
+			}
+			else if (Left == L"border")
+			{
+				border = Right != L"disable";
+			}
+			else if (Left == L"enable")
+			{
+				enable = Right != L"disable";
+			}
+			else if (Left == L"id")
+			{
+				Id.clear();
+				for (const auto& S : Split(Right)) Id.insert(S);
+			}
+			else if (Left == L"class")
+			{
+				Class.clear();
+				for (const auto& S : Split(Right)) Class.insert(S);
+			}
+		}
+
 		DrawItem() = default;
 		DrawItem(std::wstring com, const std::uint64_t& _uuid, const std::uint64_t& _parent = 0) : uuid(_uuid)
 		{
-			parent = _parent;
 			Attribute[L"inherit-z-index"] = L"0";
 			Attribute[L"z-index"] = L"0";
-
-			Attribute[L"background"] = L"disable";
-			Attribute[L"background-color-r"] = L"1";
-			Attribute[L"background-color-g"] = L"1";
-			Attribute[L"background-color-b"] = L"1";
-			Attribute[L"border"] = L"disable";
 			Attribute[L"color-r"] = L"1";
-			Attribute[L"color-g"] = L"1";
+			Attribute[L"color-g"] = L"0";
 			Attribute[L"color-b"] = L"1";
-			Attribute[L"opacity"] = L"1";
-
+			Attribute[L"background_color-r"] = L"1";
+			Attribute[L"background_color-g"] = L"1";
+			Attribute[L"background_color-b"] = L"1";
 			Attribute[L"left"] = L"0";
 			Attribute[L"top"] = L"0";
-			Attribute[L"position-left"] = L"0";
-			Attribute[L"position-top"] = L"0";
+			Attribute[L"inherit-left"] = L"0";
+			Attribute[L"inherit-top"] = L"0";
+			Attribute[L"width"] = L"32";
+			Attribute[L"height"] = L"32";
+			Attribute[L"opacity"] = L"1";
+			Attribute[L"background"] = L"disable";
+			Attribute[L"border"] = L"disable";
+			Attribute[L"enable"] = L"enable";
+			Attribute[L"id"] = L"";
+			Attribute[L"class"] = L"";
 
-			Attribute[L"width"] = L"64";
-			Attribute[L"height"] = L"64";
+			parent = _parent;
 
 			std::wstring buf = com;
 
@@ -102,8 +224,8 @@ namespace YTML
 								rvalue = L"";
 							else
 								rvalue = rvalue.substr(1, rvalue.length() - 2);
-							
 							Attribute[construct.substr(0, sign)] = rvalue;
+							SetAttribute(construct.substr(0, sign), rvalue);
 						}
 
 
@@ -120,10 +242,45 @@ namespace YTML
 
 		}
 
-		std::wstring& operator[] (const std::wstring& index) { return Attribute[index]; }
+		struct DrawAttribute
+		{
+			DrawItem* item;
+			decltype(DrawItem::Attribute)::reference str;
+			DrawAttribute(decltype(DrawItem::Attribute)::reference Str,DrawItem* Item) : str(Str), item(Item) {}
+			DrawAttribute operator=(const std::wstring& ws)
+			{
+				str.second = ws;
+				item->SetAttribute(str.first, ws);
+				return *this;
+			}
+			bool operator==(const std::wstring& ws)
+			{
+				return str.second == ws;
+			}
+			bool operator!=(const std::wstring& ws)
+			{
+				return str.second != ws;
+			}
+			operator std::wstring() const {
+				return str.second; 
+			}
+			const wchar_t* c_str()
+			{
+				return str.second.c_str();
+			}
+			size_t length()
+			{
+				return str.second.length();
+			}
+		};
+
+		DrawAttribute operator[] (const std::wstring& index) {
+			if (Attribute.find(index) == Attribute.end()) Attribute.insert(std::make_pair(index, L""));
+			for (auto& A : Attribute) if (A.first == index) return DrawAttribute(A, this);
+			throw;
+		}
 
 
-		float z_index = 0.f;
 		const std::uint64_t uuid;
 		std::uint64_t parent;
 	};
@@ -140,7 +297,7 @@ namespace YTML
 			{
 				try
 				{
-					O.z_index = Float(O[L"z-index"]) + Float(O[L"inherit-z-index"]);
+					O.z_index = O.z_index + O.inherit_z_index;
 				}
 				catch (const std::exception&)
 				{
@@ -169,6 +326,7 @@ namespace YTML
 					if (P == args.end()) break;
 					for (auto& O : content)
 					{
+						O->SetAttribute(head, *(P));
 						(*O)[head] = *(P++);
 					}
 				}
@@ -228,7 +386,7 @@ namespace YTML
 					break;
 				case YTML::DrawItemList::SelectorType::ID:
 					for (auto O = data.begin(); O != data.end(); ++O)
-						if ((*O)[L"id"] == S.at(0))
+						if (O->Id.find(S.at(0)) != O->Id.end())
 						{
 							_Return.content.push_back(O);
 							break;
@@ -236,7 +394,7 @@ namespace YTML
 					break;
 				case YTML::DrawItemList::SelectorType::CLASS:
 					for (auto O = data.begin(); O != data.end(); ++O)
-						if ((*O)[L"class"] == S.at(0))
+						if (O->Class.find(S.at(0)) != O->Class.end())
 						{
 							_Return.content.push_back(O);
 						}
@@ -286,7 +444,7 @@ namespace YTML
 						break;
 					case YTML::DrawItemList::SelectorType::ID:
 						for (auto O = data.begin(); O != data.end() && hard_break; ++O)
-							if ((*O)[L"id"] == S.at(i) && O->parent != 0)
+							if (O->Id.find(S.at(i)) != O->Id.end() && O->parent != 0)
 							{
 								for (auto P : buffer)
 								{
@@ -318,7 +476,7 @@ namespace YTML
 						else
 						{
 							for (auto O = data.begin(); O != data.end() && hard_break; ++O)
-								if ((*O)[L"class"] == S.at(i) && O->parent != 0)
+								if (O->Class.find(S.at(i)) != O->Class.end() && O->parent != 0)
 								{
 									for (auto P : buffer)
 									{

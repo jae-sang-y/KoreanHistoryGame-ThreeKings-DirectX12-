@@ -88,9 +88,13 @@ void Subdivide(VertexOut inVerts[3], out VertexOut outVerts[6])
 	m[1].PosW = 0.5*(inVerts[1].PosW + inVerts[2].PosW);
 	m[2].PosW = 0.5*(inVerts[2].PosW + inVerts[0].PosW);
 
-	m[0].PosH.y += 0.15;
-	m[1].PosH.y += 0.15;
-	m[2].PosH.y += 0.15;
+	m[0].SubProv = inVerts[0].SubProv;
+	m[1].SubProv = inVerts[1].SubProv;
+	m[2].SubProv = inVerts[2].SubProv;
+
+	m[0].Prov = inVerts[0].Prov;
+	m[1].Prov = inVerts[1].Prov;
+	m[2].Prov = inVerts[2].Prov;
 
 	//m[0].PosH = normalize(m[0].PosH);
 	//m[1].PosH = normalize(m[1].PosH);
@@ -100,55 +104,49 @@ void Subdivide(VertexOut inVerts[3], out VertexOut outVerts[6])
 	m[1].NormalW = 0.5*(inVerts[1].NormalW + inVerts[2].NormalW);
 	m[2].NormalW = 0.5*(inVerts[2].NormalW + inVerts[0].NormalW);
 
-	if (CompareFloat4(inVerts[0].Prov, inVerts[1].Prov, 0.1f))
+	bool side = false;
+	bool same = false;
+	for (uint i = 0; i < 3; i++)
 	{
-		m[0].Prov = inVerts[0].Prov;
-	}
-	else 
-	{
-		if (inVerts[0].Prov.a != 0 && inVerts[1].Prov.a != 0.f)
+		if (inVerts[i].ProvIndex == inVerts[(i + 1) % 3].ProvIndex)
 		{
-			m[0].Prov = 0.5*(inVerts[0].Prov + inVerts[1].Prov);
-			inVerts[0].Prov.a *= 2.0;
-			inVerts[1].Prov.a *= 2.0;
+			m[i].Prov = (inVerts[i].Prov + inVerts[(i + 1) % 3].Prov) / 2;
+			m[i].SubProv = (inVerts[i].SubProv + inVerts[(i + 1) % 3].SubProv) / 2;
 		}
-		else
+		else if (inVerts[i].ProvIndex != 0 && inVerts[(i + 1) % 3].ProvIndex != 0)
 		{
-			m[0].Prov = float4(0.f, 0.f, 0.f, 0.f);
-		}
-	}
-	if (CompareFloat4(inVerts[1].Prov, inVerts[2].Prov, 0.1f))
-	{
-		m[1].Prov = inVerts[1].Prov;
-	}
-	else
-	{
-		if (inVerts[1].Prov.a != 0 && inVerts[2].Prov.a != 0.f)
-		{
-			m[1].Prov = 0.5*(inVerts[1].Prov + inVerts[2].Prov);
-			inVerts[1].Prov.a *= 2.0;
-			inVerts[2].Prov.a *= 2.0;
-		}
-		else
-		{
-			m[1].Prov = float4(0.f, 0.f, 0.f, 0.f);
+			if (
+				inVerts[i].Prov.r == inVerts[(i + 1) % 3].Prov.r &&
+				inVerts[i].Prov.g == inVerts[(i + 1) % 3].Prov.g &&
+				inVerts[i].Prov.b == inVerts[(i + 1) % 3].Prov.b				
+				)
+			{
+				same = true;
+			}
+			side = true;
 		}
 	}
-	if (CompareFloat4(inVerts[2].Prov, inVerts[0].Prov, 0.1f))
+	
+	if (side)
 	{
-		m[2].Prov = inVerts[2].Prov;
-	}
-	else 
-	{
-		if (inVerts[2].Prov.a != 0 && inVerts[0].Prov.a != 0.f)
+		float4 mainColor = float4(0.f, 0.f, 0.f, 0.5f);
+		float4 subColor = float4(0.f, 0.f, 0.f, 0.5f);
+		if (same)
 		{
-			m[2].Prov = 0.5*(inVerts[2].Prov + inVerts[0].Prov);
-			inVerts[2].Prov.a *= 2.0;
-			inVerts[0].Prov.a *= 2.0;
+			mainColor = inVerts[0].Prov;
+			mainColor.rgb *= 0.75f;
+			subColor = inVerts[0].Prov;
+			subColor.rgb *= 0.75f;
 		}
-		else
+		
 		{
-			m[2].Prov = float4(0.f, 0.f, 0.f, 0.f);
+			for (uint i = 0; i < 3; i++)
+			{
+				m[i].Prov = mainColor;
+				m[i].SubProv = subColor;
+				inVerts[i].Prov = mainColor;
+				inVerts[i].SubProv = subColor;
+			}
 		}
 	}
 
@@ -169,16 +167,16 @@ void Subdivide(VertexOut inVerts[3], out VertexOut outVerts[6])
 	outVerts[5] = m[1];
 }
 
-[maxvertexcount(3)]
+[maxvertexcount(6)]
 void GS(
 	triangle VertexOut input[3],
 	inout TriangleStream< GSOutput > output
 )
 {
-	output.Append(input[0]);
+	/*output.Append(input[0]);
 	output.Append(input[1]);
-	output.Append(input[2]);
-	/*VertexOut out_m[6];
+	output.Append(input[2]);*/
+	VertexOut out_m[6];
 	Subdivide(input, out_m);
 
 	for (uint i = 0; i < 6; i++)
@@ -186,7 +184,7 @@ void GS(
 		GSOutput element;
 		element = out_m[i];
 		output.Append(element);
-	}*/
+	}
 
 	
 }

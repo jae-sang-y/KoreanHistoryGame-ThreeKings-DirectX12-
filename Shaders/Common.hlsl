@@ -13,6 +13,7 @@ struct VertexOut
 	float3 PosW    : POSITION;
 	float3 NormalW : NORMAL;
 	float2 TexC    : TEXCOORD;
+	uint ProvIndex : PROVINDEX;
 	float4 Prov : PROVCOLOR;
 	float4 SubProv : SUBPROVCOLOR;
 };
@@ -23,6 +24,7 @@ struct GSOutput
 	float3 PosW    : POSITION;
 	float3 NormalW : NORMAL;
 	float2 TexC    : TEXCOORD;
+	uint ProvIndex : PROVINDEX;
 	float4 Prov : PROVCOLOR;
 	float4 SubProv : SUBPROVCOLOR;
 };

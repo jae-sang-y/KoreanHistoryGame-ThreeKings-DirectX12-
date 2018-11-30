@@ -104,7 +104,12 @@ struct Province {
 	NationId owner = 0;
 	NationId ruler = 0;
 
-	std::int64_t man = 0;
+	std::int64_t man = 1000 + rand() % 1600;
+	std::int64_t maxman = 4000 + rand() % 6400;
+	std::int64_t hp = 1000;
+
+	float length_from_contry_side = 0;
+	float prioriy, require;
 
 	Province()
 	{
@@ -120,12 +125,14 @@ struct Nation
 {
 	XMFLOAT4 MainColor = { 0.f, 0.f, 0.f, 0.f };
 	std::wstring MainName = L"오류";
+	std::unordered_map<std::wstring, std::wstring> flag;
 	bool Ai = true;
 };
 enum class CommandType
 {
 	Move,
-	Sieze
+	Sieze,
+	Attack
 };
 struct Command
 {
@@ -136,6 +143,12 @@ struct Command
 	Command(const CommandType _type, const ProvinceId prov = 0, const LeaderId leader = 0, const float _need = 0) : type(_type), target_prov(prov), target_leader(leader), need(_need) {}
 };
 
+enum class LeaderType
+{
+	Attack,
+	Defend,
+	All
+};
 struct Leader
 {
 	std::list<Command> cmd;
@@ -145,6 +158,10 @@ struct Leader
 	bool selected = false;
 
 	std::int64_t size = 1000;
+	LeaderType type = (LeaderType)(rand() % (int)LeaderType::All);
+
+	float abb_sieze = 1;
+	float abb_move = 1;
 
 	NationId owner;
 	Leader(const ProvinceId& loc, const NationId& own, const std::int64_t& _size) : location(loc), owner(own), size(_size) {};
@@ -164,6 +181,7 @@ struct ProvincePath
 {
 	std::list<ProvinceId> path;
 	std::map<ProvinceId, ProvincePathNode> prv;
+	float length;
 	decltype(path)::iterator begin() { return path.begin(); }
 	decltype(path)::iterator end() { return path.end(); }
 
@@ -228,6 +246,7 @@ struct ProvincePath
 		if (prv.at(Start).Out != ProvincePathOutState::NotOut)
 		{
 			ProvinceId Index = Start;
+			length = prv.at(Start).Length;
 			do
 			{
 				Index = prv.at(Index).Nearest;
@@ -254,7 +273,8 @@ public:
 
 		if (points.size() == 0) return;
 
-
+		if (points.size() > 0x2000)
+			points.resize(0x2000);
 		float center = (points.size() - 1) / 2.f;
 		for (int i = 0; i < points.size() - 1; ++i)
 		{
@@ -308,7 +328,6 @@ public:
 		BuildLine();
 	}
 };
-
 struct Data
 {
 	bool run = true;
@@ -322,6 +341,14 @@ struct Data
 
 	LeaderId last_leader_id = 0;
 	ProvinceId last_prov_id = 0;
+
+	std::random_device rd;
+	std::mt19937 mt;
+
+	Data()
+	{
+		mt = std::mt19937(rd());
+	}
 
 	Leader NewLeader(const ProvinceId& loc, const NationId& own, const std::int64_t& _size)
 	{
@@ -471,7 +498,7 @@ private:
 
 
 
-	bool Act(std::wstring wstr, std::initializer_list<std::wstring> args, bool need_return = false);
+	std::unordered_map<std::wstring, std::wstring> Act(std::wstring wstr, std::initializer_list<std::wstring> args, bool need_return = false, bool try_lock = true);
 
 
 	std::shared_ptr<Data> m_gamedata = std::make_shared<Data>();
@@ -569,18 +596,75 @@ void MyApp::MainGame() //!@
 	{
 		for (auto& O : m_gamedata->province)
 		{
-			O.second->man += (1900 - O.second->man) / 10 % 10 + 1;
+			O.second->man += (int64_t)round(min(max((O.second->maxman - O.second->man)/1200.0,-10),10));
+			
+			if (O.second->owner != O.second->ruler && O.second->man > O.second->maxman / 4)
+			{
+				if (O.second->man + O.second->hp * 2 > rand() % (1 + (int)(1.0 * rand() / RAND_MAX * 30000)) + O.second->maxman / 4)
+				{
+					Act(L"Draft", { L"location", Str(O.first), L"size", Str(O.second->man), L"owner", Str(O.second->owner) });
+				}
+			}
+
+			if (O.second->hp < 0) O.second->hp = 0;
+			else if (O.second->hp >= 1000)
+			{
+				O.second->hp = 1000;
+				O.second->owner = O.second->ruler;
+			}
+			else O.second->hp += 1;
 
 			if (m_gamedata->last_prov_id == O.first)
 			{
 				GUIUpdatePanelProvince();
 			}
+
+			
 		}
 
+		draw_mutex.lock();
+
+		for (auto O = m_gamedata->leaders.begin(); O != m_gamedata->leaders.end(); ++O)
+		{
+			if (O->second->size <= 0)
+			{
+				if (m_gamedata->last_leader_id == O->first) m_gamedata->last_leader_id = 0;
+				
+				for (const auto& E : m_DrawItems->$(L"#leader" + Str(O->first) + L" flag")) m_DrawItems->data.erase(E);
+				for (const auto& E : m_DrawItems->$(L"#leader" + Str(O->first) + L" state")) m_DrawItems->data.erase(E);
+				for (const auto& E : m_DrawItems->$(L"#leader" + Str(O->first) + L" num")) m_DrawItems->data.erase(E);
+				for (const auto& E : m_DrawItems->$(L"#leader" + Str(O->first) + L" background")) m_DrawItems->data.erase(E);
+				for (const auto& E : m_DrawItems->$(L"#leader" + Str(O->first) + L" progress")) m_DrawItems->data.erase(E);
+				for (const auto& E : m_DrawItems->$(L"#leader" + Str(O->first))) m_DrawItems->data.erase(E);
+				m_gamedata->leaders.erase((O--)->first);
+			}
+		}
+		draw_mutex.unlock();
 
 		flag_update_leaders = false;
 		for (auto& O : m_gamedata->leaders)
 		{
+			if (O.second->owner != m_gamedata->province.at(O.second->location)->ruler)
+			{
+				//O.second->size = (std::int64_t)std::round(O.second->size * 0.997);
+				///if (O.second->size > 1000) O.second->size -= (O.second->size - 1000) / 10000;
+			}
+			else 
+			{
+				if (auto& P = m_gamedata->province.at(O.second->location); O.second->cmd.size() == 0)
+				{
+					//if (O.second->size < 2992)
+					{
+						if (P->man >= 9 && O.second->owner == m_gamedata->province.at(O.second->location)->owner)
+						{
+							O.second->size += 9;
+							P->man -= 9;
+						}
+						if (P->hp < 1000) P->hp += 1;
+					}
+
+				}
+			}
 			if (O.second->cmd.size() > 0)
 			{
 				auto B = O.second->cmd.begin();
@@ -595,13 +679,60 @@ void MyApp::MainGame() //!@
 						O.second->location = B->target_prov;
 						break;
 					case CommandType::Sieze:
-						m_gamedata->province.at(O.second->location)->ruler = O.second->owner;
+						m_gamedata->province.at(O.second->location)->hp -= (77 + rand() % 100 + O.second->size / 600) * 2;
+						//O.second->size = (int)(0.9 * O.second->size);
+						if (m_gamedata->province.at(O.second->location)->hp <= 0)
+						{
+							m_gamedata->province.at(O.second->location)->ruler = O.second->owner;
+							O.second->size += m_gamedata->province.at(O.second->location)->man;
+							m_gamedata->province.at(O.second->location)->man = 0;
+							m_gamedata->province.at(O.second->location)->hp = 0;
+						}
+						break;
+					case CommandType::Attack:
+						auto L = m_gamedata->leaders.find(std::move(B->target_leader));
+						if (L != m_gamedata->leaders.end() && L->second->location == O.second->location && O.second->size > 0 && L->second->size > 0)
+						{
+							L->second->size -= O.second->size / 4;
+							if (L->second->size > 0)
+							{
+								O.second->size -= L->second->size / 4;
+								if (L->second->cmd.size() > 0 && (L->second->cmd.begin()->type == CommandType::Sieze || L->second->cmd.begin()->type == CommandType::Move))
+								{
+									L->second->cmd_pr = 0;
+									L->second->cmd.pop_front();
+								}
+							}
+						}
 						break;
 					}
 					O.second->cmd.pop_front();
 				}
 				else
 				{
+					switch (B->type)
+					{
+					case CommandType::Sieze:
+						if (m_gamedata->province.at(O.second->location)->ruler == O.second->owner)
+						{
+							O.second->cmd.pop_front();
+							O.second->cmd_pr = -1;
+						}
+						break;
+					case CommandType::Attack:
+						auto L = m_gamedata->leaders.find(std::move(B->target_leader));
+						if (L == m_gamedata->leaders.end())
+						{
+							O.second->cmd.pop_front();
+							O.second->cmd_pr = -1;
+						}
+						else if (L->second->location != O.second->location)
+						{
+							O.second->cmd.pop_front();
+							O.second->cmd_pr = -1;
+						}
+						break;
+					}
 					O.second->cmd_pr += 1;
 				}
 				if (O.second->selected) flag_update_leaders = true;
@@ -610,23 +741,182 @@ void MyApp::MainGame() //!@
 			}
 			else
 			{
-				if (m_gamedata->province.at(O.second->location)->ruler != O.second->owner)
+				std::vector<LeaderId> sameLocLeader;
+				for (auto& L : m_gamedata->leaders)
 				{
-					O.second->cmd.push_back(Command(CommandType::Sieze, O.second->location, 0, 60));
+					if (L.second->location == O.second->location && L.second->owner != O.second->owner)
+					{
+						if (L.second->cmd.size() > 0 && L.second->cmd.begin()->type == CommandType::Sieze)
+						{
+							sameLocLeader.clear();
+							sameLocLeader.push_back(L.first);
+							break;
+						}
+						else
+						{
+							sameLocLeader.push_back(L.first);
+						}
+					}
+				}
+				std::shuffle(sameLocLeader.begin(), sameLocLeader.end(), m_gamedata->rd);
+				if (sameLocLeader.size() > 0) O.second->cmd.push_back(Command(CommandType::Attack, 0, *sameLocLeader.begin(), 10));
+				else if (m_gamedata->province.at(O.second->location)->ruler != O.second->owner)
+				{
+					O.second->cmd.push_back(Command(CommandType::Sieze, O.second->location, 0, 20 / O.second->abb_sieze));
+				}
+				else
+				{
+					if (m_gamedata->province.at(O.second->location)->hp < 1000) m_gamedata->province.at(O.second->location)->hp += O.second->size / 1000;
 				}
 			}
-
 		}
 
+
+		//AI
 		for (auto& N : m_gamedata->nations)
 		{
 			if (N.second->Ai)
 			{
+				std::list<ProvinceId> myProv;
+				std::list<LeaderId> myLead;
+
+				for (auto& P : m_gamedata->province) 
+				{ 
+					if (P.second->owner == N.first || P.second->ruler == N.first) myProv.push_back(P.first); 
+
+					if (P.second->owner == N.first)
+					{
+						if (P.second->ruler == N.first) //내 영토의 내 소유
+						{
+							P.second->prioriy = 1 * (2000 - P.second->hp);
+						}
+						else							//내 영토의 적 소유
+						{
+							P.second->prioriy = 3 * (2000 - P.second->hp);
+						}
+					}
+					else
+					{
+						if (P.second->ruler == N.first)	 //적 영토의 내 소유
+						{
+							P.second->prioriy = 1 * (2000 - P.second->hp);
+						}
+						else							 //적 영토의 적 소유
+						{
+							P.second->prioriy = 2 * (2000 - P.second->hp);
+						}
+					}
+				}
+				for (auto& L : m_gamedata->leaders) 
+				{ 
+					ProvinceId lastLoc = L.second->location;
+					if (L.second->cmd.size() > 0)
+					{
+						float rate_time = -L.second->cmd_pr;
+						for (auto& C : L.second->cmd)
+						{
+							rate_time += C.need;
+							if (C.type == CommandType::Move) lastLoc = C.target_prov;
+						}
+					}
+					auto& P = m_gamedata->province.at(lastLoc);
+
+					if (L.second->owner == N.first)
+					{
+						myLead.push_back(L.first);
+						P->require -= L.second->size;
+						if (P->ruler == N.first)// 내 땅에 내 군사
+							P->prioriy -= 2 * L.second->size;
+						else					// 남 땅에 내 군사
+							P->prioriy -= 0.1f * L.second->size;
+					}
+					else
+					{
+						P->require += L.second->size;
+						if (P->ruler == N.first)// 내 땅에 남 군사
+							P->prioriy += 2 * L.second->size;
+						else					// 남 땅에 남 군사
+							P->prioriy -= 1 * L.second->size;
+					}
+				}
+
+				size_t LeaderCount = myLead.size();
+				for (const auto& p : myProv)
+				{
+					if (LeaderCount >= myProv.size() / 2 + 1 ) break;
+					auto& P = m_gamedata->province[p];
+					if (N.first == P->ruler && P->man >= 1000)
+					{
+						if (auto X = Act(L"Draft", { L"location", Str(p), L"size", Str(P->man) }); X.find(L"SUCCESS") != X.end()) ++LeaderCount;
+					}
+				}
+
+				for (const auto& l : myLead)
+				{
+					auto& L = m_gamedata->leaders[l];
+					if (L->cmd.size() == 0)
+					{
+						ProvinceId target = L->location;
+						float org_syn = m_gamedata->province[L->location]->prioriy + L->size;
+						float syn = org_syn;
+						float tmp = 0;
+
+						for (auto& P : m_gamedata->province)
+						{
+							if (P.second->prioriy < org_syn) continue;
+							auto path = ProvincePath(m_gamedata->province, m_gamedata->province_connect, L->location, P.first);
+							if (syn < P.second->prioriy - path.length * 16)
+							{
+								syn = P.second->prioriy - path.length * 16;
+								target = P.first;
+							}
+						}
+
+						auto path = ProvincePath(m_gamedata->province, m_gamedata->province_connect, L->location, target);
+
+						if (path.path.size() > 0)
+						{
+							m_gamedata->province[target]->prioriy -= L->size;
+							m_gamedata->province[L->location]->prioriy += L->size;
+
+							L->cmd_pr = 0;
+							L->cmd.clear();
+							ProvinceId lastLoc = L->location;
+							for (auto P : path)
+							{
+								L->cmd.push_back(Command(CommandType::Move, P, 0, m_gamedata->province_connect.at(std::make_pair(lastLoc, P)) / L->abb_move));
+								lastLoc = P;
+								break;
+							}
+						}						
+					}
+				}
+
+
+
+			}
+			else
+			{
+				size_t myProvCount = 0;
+				size_t myLeaderCount = 0;
 				for (auto& P : m_gamedata->province)
 				{
-					if (P.second->ruler == N.first && P.second->owner == N.first)
+					if (P.second->ruler == N.first || P.second->owner == N.first) ++myProvCount;
+				}
+				for (auto& L : m_gamedata->leaders)
+				{
+					ProvinceId lastLoc = L.second->location;
+					auto& P = m_gamedata->province.at(lastLoc);
+
+					if (L.second->owner == N.first) ++myLeaderCount;
+				}
+				for (auto& P : m_gamedata->province)
+				{
+					if (!(myLeaderCount < myProvCount / 2 + 1))break;
+					if (N.first == P.second->ruler && P.second->man >= 1000)
 					{
-						Act(L"Draft", { L"location", Str(P.first) });
+						Act(L"Draft", { L"location", Str(P.first), L"size", Str(P.second->man) });
+						++myLeaderCount;
 					}
 				}
 			}
@@ -795,7 +1085,14 @@ void MyApp::BuildImage()
 	loadBitmap(LR"(Images\window-highlight.png)", L"WindowHighlight");
 	loadBitmap(LR"(Images\button.png)", L"Button");
 	loadBitmap(LR"(Images\dark-button.png)", L"DarkButton");
-	loadBitmap(LR"(Images\flags\말갈.bmp)", L"말갈");
+	loadBitmap(LR"(Images\flags\모름.bmp)", L"모르는국기");
+
+
+	loadBitmap(LR"(Images\ui\leader\attack.png)", L"Leader-attack");
+	loadBitmap(LR"(Images\ui\leader\move.png)", L"Leader-move");
+	loadBitmap(LR"(Images\ui\leader\sieze.png)", L"Leader-sieze");
+
+
 	wchar_t buf[256];
 	for (const auto& O : m_gamedata->nations)
 	{
@@ -823,23 +1120,23 @@ void MyApp::DrawUI()
 	m_DrawItems->Sort();
 	for (auto& O : m_DrawItems->data)
 	{
-		if (O[L"enable"] == L"disable")
+		if (!O.enable)
 			continue;
 
 		try
 		{
-			m_d2d->Brush[L"Main"]->SetColor(D2D1::ColorF(Float(O[L"color-r"]), Float(O[L"color-g"]), Float(O[L"color-b"])));
-			m_d2d->Brush[L"Main"]->SetOpacity(Float(O[L"opacity"]));
-			m_d2d->Brush[L"Back"]->SetColor(D2D1::ColorF(Float(O[L"background-color-r"]), Float(O[L"background-color-g"]), Float(O[L"background-color-b"])));
-			m_d2d->Brush[L"Back"]->SetOpacity(Float(O[L"opacity"]));
+			m_d2d->Brush[L"Main"]->SetColor(D2D1::ColorF(O.color_r, O.color_g, O.color_b));
+			m_d2d->Brush[L"Main"]->SetOpacity(O.opacity);
+			m_d2d->Brush[L"Back"]->SetColor(D2D1::ColorF(O.background_color_r, O.background_color_g, O.background_color_b));
+			m_d2d->Brush[L"Back"]->SetOpacity(O.opacity);
 
-			Draw_point.x = Float(O[L"left"]);
-			Draw_point.y = Float(O[L"top"]);
-			Draw_point.x += Float(O[L"position-left"]);
-			Draw_point.y += Float(O[L"position-top"]);
+			Draw_point.x = O.left;
+			Draw_point.y = O.top;
+			Draw_point.x += O.inherit_left;
+			Draw_point.y += O.inherit_top;
 
-			Draw_size.width = Float(O[L"width"]);
-			Draw_size.height = Float(O[L"height"]);
+			Draw_size.width = O.width;
+			Draw_size.height = O.height;
 
 			if (O[L"horizontal-align"] == L"center")
 			{
@@ -873,13 +1170,13 @@ void MyApp::DrawUI()
 				Draw_rect.bottom = Draw_point.y + Draw_size.height;
 			}
 
+			if (O.background)
+				g->FillRectangle(Draw_rect, m_d2d->Brush[L"Back"].Get());
+			//if (O.border)
+			//	g->DrawRectangle(Draw_rect, m_d2d->Brush[L"Main"].Get());
 
 			if (O[L"tag"] == L"div")
 			{
-				if (O[L"background"] == L"enable")
-					g->FillRectangle(Draw_rect, m_d2d->Brush[L"Back"].Get());
-				if (O[L"border"] == L"enable")
-					g->DrawRectangle(Draw_rect, m_d2d->Brush[L"Main"].Get());
 				//OutputDebugStringW(((O[L"left"]) + L" : " + (O[L"top"]) + L"\n").c_str());
 			}
 			else if (O[L"tag"] == L"a")
@@ -912,6 +1209,7 @@ void MyApp::DrawUI()
 				//g->FillRectangle(rect, m_d2d->Brush[L"White"].Get());
 				g->FillRectangle(Draw_rect, m_d2d->BitmapBrush.Get());
 			}
+			//g->DrawRectangle(Draw_rect, m_d2d->Brush[L"Main"].Get());
 		}
 		catch (const std::exception&)
 		{
@@ -1074,14 +1372,28 @@ void MyApp::Query(const std::wstring& query)
 						{
 							if (mQuery.tag_prov_it != m_gamedata->province.end())
 							{
-								mQuery.tag_prov_it->second->ruler = Long(O);
+								for (const auto& N : m_gamedata->nations)
+								{
+									if (N.second->MainName == O)
+									{
+										mQuery.tag_prov_it->second->ruler = N.first;
+										break;
+									}
+								}
 							}
 						}
 						else if (mQuery.index == L"-owner")
 						{
 							if (mQuery.tag_prov_it != m_gamedata->province.end())
 							{
-								mQuery.tag_prov_it->second->owner = Long(O);
+								for (const auto& N : m_gamedata->nations)
+								{
+									if (N.second->MainName == O)
+									{
+										mQuery.tag_prov_it->second->owner = N.first;
+										break;
+									}
+								}
 							}
 						}
 
@@ -1111,9 +1423,18 @@ void MyApp::GameSave()
 
 	for (const auto& O : m_gamedata->province)
 	{
-		file << L"PROVINCE" << L"\t" << L"-id " << std::to_wstring(O.first)
-			<< L" -ruler " << std::to_wstring(O.second->ruler)
-			<< L" -owner " << std::to_wstring(O.second->owner) << L";\n";
+		file << L"PROVINCE" << L"\t" << L"-id " << std::to_wstring(O.first);
+
+		if (auto find = m_gamedata->nations.find(O.second->ruler); find != m_gamedata->nations.end())
+		{
+			file << L" -ruler " << m_gamedata->nations.at(O.second->ruler)->MainName;
+		}
+		if (auto find = m_gamedata->nations.find(O.second->owner); find != m_gamedata->nations.end())
+		{
+			file << L" -owner " << m_gamedata->nations.at(O.second->owner)->MainName;
+		}
+
+		file << L";\n";
 	}
 
 	file << L"SAVE\tEND" << L";\n";
@@ -1173,14 +1494,65 @@ void MyApp::GameInit()
 		백제->MainColor = XMFLOAT4(0.1f, 0.5f, 0.45f, 0.75f);
 		백제->MainName = L"백제";
 		m_gamedata->nations[++nation_count] = std::move(백제);
-		mUser.nationPick = nation_count;
+		//mUser.nationPick = nation_count;
 
 		std::unique_ptr<Nation> 고구려 = std::make_unique<Nation>();
 		고구려->MainColor = XMFLOAT4(0.4f, 0.0f, 0.0f, 0.75f);
 		고구려->MainName = L"고구려";
 		m_gamedata->nations[++nation_count] = std::move(고구려);
+
+		std::unique_ptr<Nation> 당나라 = std::make_unique<Nation>();
+		당나라->MainColor = XMFLOAT4(0.8f, 0.5f, 0.0f, 0.75f);
+		당나라->MainName = L"당나라";
+		m_gamedata->nations[++nation_count] = std::move(당나라);
+
+		std::unique_ptr<Nation> 말갈 = std::make_unique<Nation>();
+		말갈->MainColor = XMFLOAT4(0.25f, 0.0f, 0.0f, 0.75f);
+		말갈->MainName = L"말갈";
+		m_gamedata->nations[++nation_count] = std::move(말갈);
+
+		std::unique_ptr<Nation> 왜 = std::make_unique<Nation>();
+		왜->MainColor = XMFLOAT4(1.0f, 0.25f, 0.25f, 0.75f);
+		왜->MainName = L"왜";
+		m_gamedata->nations[++nation_count] = std::move(왜);
+
+		std::unique_ptr<Nation> 원나라 = std::make_unique<Nation>();
+		원나라->MainColor = XMFLOAT4(0.3f, 0.5f, 0.8f, 0.75f);
+		원나라->MainName = L"원나라";
+		m_gamedata->nations[++nation_count] = std::move(원나라);
+
+
+		std::unique_ptr<Nation> 조선 = std::make_unique<Nation>();
+		조선->MainColor = XMFLOAT4(0.125f, 0.25f, 0.5f, 0.75f);
+		조선->MainName = L"조선";
+		m_gamedata->nations[++nation_count] = std::move(조선);
+
+		std::unique_ptr<Nation> 고려 = std::make_unique<Nation>();
+		고려->MainColor = XMFLOAT4(1.f, 0.f, 0.f, 0.75f);
+		고려->MainName = L"고려";
+		m_gamedata->nations[++nation_count] = std::move(고려);
+
+		std::unique_ptr<Nation> 가야 = std::make_unique<Nation>();
+		가야->MainColor = XMFLOAT4(0.25f, 0.5f, 0.0625f, 0.75f);
+		가야->MainName = L"가야";
+		m_gamedata->nations[++nation_count] = std::move(가야);
+
+		std::unique_ptr<Nation> 한국 = std::make_unique<Nation>();
+		한국->MainColor = XMFLOAT4(1.f, 1.f, 1.f, 0.75f);
+		한국->MainName = L"한국";
+		m_gamedata->nations[++nation_count] = std::move(한국);
+
+		std::unique_ptr<Nation> 발해 = std::make_unique<Nation>();
+		발해->MainColor = XMFLOAT4(0.75f, 0.5f, 1.f, 0.75f);
+		발해->MainName = L"발해";
+		m_gamedata->nations[++nation_count] = std::move(발해);
+
+		std::unique_ptr<Nation> 낙랑 = std::make_unique<Nation>();
+		낙랑->MainColor = XMFLOAT4(1.f, 0.6f, 0.0625f, 0.75f);
+		낙랑->MainName = L"낙랑";
+		m_gamedata->nations[++nation_count] = std::move(낙랑);
 	}
-	m_gamedata->nations.at(mUser.nationPick)->Ai = false;
+	//m_gamedata->nations.at(mUser.nationPick)->Ai = false;
 
 
 	draw_mutex.lock();
@@ -1191,7 +1563,7 @@ void MyApp::GameInit()
 		{
 			swprintf_s(buf, LR"(<div id="prov%.0lf" enable="disable" background="enable" opacity="0.5">)", (double)O.first);
 			auto E = m_DrawItems->Insert(buf);
-			swprintf_s(buf, LR"(<a id="provtext%.0lf" enable="disable" opacity="1.0">)", (double)O.first);
+			swprintf_s(buf, LR"(<a id="provtext%.0lf" enable="disable" opacity="1.0" color-hex="FFFFFF">)", (double)O.first);
 			m_DrawItems->Insert(buf, E);
 		}
 	}
@@ -1199,53 +1571,61 @@ void MyApp::GameInit()
 	
 
 
-	m_DrawItems->Insert(LR"(<img src="신라" id="myNationFlag" left="81" top="80" width="132" height="132" z-index="9e-4" horizontal-align="center" vertical-align="center">)");
-	m_DrawItems->Insert(LR"(<img src="Window" left="0" top="0" width="161" height="160" z-index="10e-4">)");
 
-	//===================================================================================
-	std::uint64_t EM = m_DrawItems->Insert(LR"(<img class="myForm" id="myForm0" src="Form" left="200" top="200" width="400" height="480" mousedown="FormHold" mouseup="FormUnhold" z-index="2">)");
+	m_DrawItems->Insert(LR"(<img src="신라" id="myNationFlag" left="81" top="80" width="132" height="132" z-index="99" horizontal-align="center" vertical-align="center">)");
+	m_DrawItems->Insert(LR"(<img src="Window" left="0" top="0" width="161" height="160" z-index="100">)");
 
-	m_DrawItems->Insert(LR"(<a id="head" text="알 수 없음" left="26" top="60" width="348" height="48" z-index="1e-6" border="enable" pointer-events="none" color-g="0" color-r="0"  color-b="0">)", EM);
-	m_DrawItems->Insert(LR"(<a id="tail" text="영토 확인 메뉴" left="26" top="460" width="348" height="24" z-index="1e-6" border="enable" color-g="0" color-r="0"  color-b="0">)", EM);
-	m_DrawItems->Insert(LR"(<img id="flag" src="말갈" left="113" top="196" width="117" height="117" z-index="1e-6" horizontal-align="center" vertical-align="center">)", EM);
-	m_DrawItems->Insert(LR"(<img src="Window" left="40" top="124" width="144" height="144" z-index="1e-6">)", EM);
+	
+	{
+		std::uint64_t EM = m_DrawItems->Insert(LR"(<img class="myForm" id="myForm0" src="Form" left="200" top="200" width="400" height="480" mousedown="FormHold" mouseup="FormUnhold" z-index="1000">)");
 
-	std::uint64_t EME = m_DrawItems->Insert(LR"(<div id="textContainer" src="Window" left="200" top="152" width="160" height="88" z-index="1e-6">)", EM);
-	m_DrawItems->Insert(LR"(<a id="text0" text="Window" left="0" top="-8" width="160" height="40" z-index="1e-6" border="enable" color-g="0" color-r="0"  color-b="0">)", EME);
-	m_DrawItems->Insert(LR"(<a id="text1" text="Window" left="0" top="36" width="160" height="24" z-index="1e-6" border="enable" color-g="0" color-r="0"  color-b="0">)", EME);
-	m_DrawItems->Insert(LR"(<a id="text2" text="Window" left="0" top="64" width="160" height="24" z-index="1e-6" border="enable" color-g="0" color-r="0"  color-b="0">)", EME);
+		m_DrawItems->Insert(LR"(<a id="head" text="알 수 없음" left="26" top="60" width="348" height="48" z-index="1e-4" border="disable" pointer-events="none" color-g="0" color-r="0"  color-b="0">)", EM);
+		m_DrawItems->Insert(LR"(<a id="tail" text="영토 확인 메뉴" left="26" top="460" width="348" height="24" z-index="1e-4" border="disable" color-g="0" color-r="0"  color-b="0">)", EM);
+		m_DrawItems->Insert(LR"(<img id="flag" src="모르는국기" left="113" top="196" width="117" height="117" z-index="1e-4" horizontal-align="center" vertical-align="center">)", EM);
+		m_DrawItems->Insert(LR"(<img src="Window" left="40" top="124" width="144" height="144" z-index="1e-4">)", EM);
 
-	std::uint64_t EMEE = m_DrawItems->Insert(LR"(<div id="buttonbar" src="Window" left="26" top="292" width="174" height="20" z-index="1e-6">)", EM);
-	std::uint64_t EMBT = m_DrawItems->Insert(LR"(<img id="button0" src="Button" left="2" top="0" width="112" height="40" z-index="1e-6">)", EMEE);
-	m_DrawItems->Insert(LR"(<a id="text" text="Window" left="0" top="6" width="112" height="30" z-index="1e-6" border="enable" color-g="0" color-r="0"  color-b="0">)", EMBT);
-	EMBT = m_DrawItems->Insert(LR"(<img id="button1" src="Button" left="118" top="0" width="112" height="40" z-index="1e-6">)", EMEE);
-	m_DrawItems->Insert(LR"(<a id="text" text="Window" left="0" top="6" width="112" height="30" z-index="1e-6" border="enable" color-g="0" color-r="0"  color-b="0">)", EMBT);
-	EMBT = m_DrawItems->Insert(LR"(<img id="button2" src="Button" left="234" top="0" width="112" height="40" z-index="1e-6">)", EMEE);
-	m_DrawItems->Insert(LR"(<a id="text" text="Window" left="0" top="6" width="112" height="30" z-index="1e-6" border="enable" color-g="0" color-r="0"  color-b="0">)", EMBT);
+		std::uint64_t EME = m_DrawItems->Insert(LR"(<div id="textContainer" src="Window" left="200" top="152" width="160" height="88" z-index="1e-4">)", EM);
+		m_DrawItems->Insert(LR"(<a id="text0" text="Window" left="0" top="-8" width="160" height="40" z-index="1e-4" border="disable" color-g="0" color-r="0"  color-b="0">)", EME);
+		m_DrawItems->Insert(LR"(<a id="text1" text="Window" left="0" top="36" width="160" height="24" z-index="1e-4" border="disable" color-g="0" color-r="0"  color-b="0">)", EME);
+		m_DrawItems->Insert(LR"(<a id="text2" text="Window" left="0" top="64" width="160" height="24" z-index="1e-4" border="disable" color-g="0" color-r="0"  color-b="0">)", EME);
 
+		std::uint64_t EMEE = m_DrawItems->Insert(LR"(<div id="buttonbar" src="Window" left="26" top="292" width="174" height="20" z-index="1e-4">)", EM);
+		std::uint64_t EMBT = m_DrawItems->Insert(LR"(<img id="button0" src="Button" left="2" top="0" width="112" height="40" z-index="1e-4">)", EMEE);
+		m_DrawItems->Insert(LR"(<a id="text" text="Window" left="0" top="6" width="112" height="30" z-index="1e-4" border="disable" color-g="0" color-r="0"  color-b="0">)", EMBT);
+		EMBT = m_DrawItems->Insert(LR"(<img id="button1" src="Button" left="118" top="0" width="112" height="40" z-index="1e-4">)", EMEE);
+		m_DrawItems->Insert(LR"(<a id="text" text="Window" left="0" top="6" width="112" height="30" z-index="1e-4" border="disable" color-g="0" color-r="0"  color-b="0">)", EMBT);
+		EMBT = m_DrawItems->Insert(LR"(<img id="button2" src="Button" left="234" top="0" width="112" height="40" z-index="1e-4">)", EMEE);
+		m_DrawItems->Insert(LR"(<a id="text" text="Window" left="0" top="6" width="112" height="30" z-index="1e-4" border="disable" color-g="0" color-r="0"  color-b="0">)", EMBT);
+	}
+	{
+		std::uint64_t EME;
+		std::uint64_t EM = m_DrawItems->Insert(LR"(<img class="consoleForm" src="Form" left="79" top="157" width="167" height="284" mousedown="FormHold" mouseup="FormUnhold" z-index="1000">)");
+		
+		m_DrawItems->Insert(LR"(<a id="head" text="이벤트 시작" left="16" top="35" width="135" height="28" z-index="1e-4" pointer-events="none" color-g="0" color-r="0"  color-b="0">)", EM);
+		
+		EME = m_DrawItems->Insert(LR"(<img id="button0" src="Button" left="10" top="72" width="149" height="31" z-index="1e-4">)", EM);
+		m_DrawItems->Insert(LR"(<a id="text" text="1" left="0" top="0" width="149" height="31" z-index="2e-4" pointer-events="none" color-hex="FFFFFF">)", EME);
+		
+		EME = m_DrawItems->Insert(LR"(<img id="button1" src="Button" left="10" top="103" width="149" height="31" z-index="1e-4">)", EM);
+		m_DrawItems->Insert(LR"(<a id="text" text="2" left="0" top="0" width="149" height="31" z-index="1e10" pointer-events="none" color-hex="FFFFFF">)", EME);
+		
+		EME = m_DrawItems->Insert(LR"(<img id="button2" src="Button" left="10" top="134" width="149" height="31" z-index="1e-4">)", EM);
+		m_DrawItems->Insert(LR"(<a id="text" text="3" left="0" top="0" width="149" height="31" z-index="2e-4" pointer-events="none" color-hex="FFFFFF">)", EME);
+		
+		EME = m_DrawItems->Insert(LR"(<img id="button3" src="Button" left="10" top="165" width="149" height="31" z-index="1e-4">)", EM);
+		m_DrawItems->Insert(LR"(<a id="text" text="4" left="0" top="0" width="149" height="31" z-index="2e-4" pointer-events="none" color-hex="FFFFFF">)", EME);
+		
+		EME = m_DrawItems->Insert(LR"(<img id="button4" src="Button" left="10" top="196" width="149" height="31" z-index="1e-4">)", EM);
+		m_DrawItems->Insert(LR"(<a id="text" text="5" left="0" top="0" width="149" height="31" z-index="2e-4" pointer-events="none" color-hex="FFFFFF">)", EME);
+		
+		EME = m_DrawItems->Insert(LR"(<img id="button5" src="Button" left="10" top="227" width="149" height="31" z-index="1e-4">)", EM);
+		m_DrawItems->Insert(LR"(<a id="text" text="6" left="0" top="0" width="149" height="31" z-index="2e-4" pointer-events="none" color-hex="FFFFFF">)", EME);
+		
+		m_DrawItems->Insert(LR"(<a id="tail" text="콘솔" left="33" top="264" width="101" height="20" z-index="1e-4" pointer-events="none" color-hex="FFFFFF">)", EM);
+	}
+					
 
-	/*std::uint64_t EM = m_DrawItems->Insert(LR"(<img class="myForm" id="myForm0" src="Form" left="100" top="100" width="200" height="240" mousedown="FormHold" mouseup="FormUnhold" z-index="2">)");
-	m_DrawItems->Insert(LR"(<a id="head" text="알 수 없음" left="13" top="30" width="174" height="24" z-index="1e-6" border="enable" pointer-events="none" color-g="0" color-r="0"  color-b="0">)", EM);
-	m_DrawItems->Insert(LR"(<a id="tail" text="영토 확인 메뉴" left="13" top="226" width="174" height="12" z-index="1e-6" border="enable" color-g="0" color-r="0"  color-b="0">)", EM);
-
-	m_DrawItems->Insert(LR"(<img id="flag" src="말갈" left="25" top="66" width="62" height="62" z-index="1e-6" >)", EM);
-	m_DrawItems->Insert(LR"(<img src="Window" left="20" top="62" width="72" height="70" z-index="1e-6">)", EM);
-
-	std::uint64_t EME = m_DrawItems->Insert(LR"(<div id="textContainer" src="Window" left="100" top="76" width="80" height="44" z-index="1e-6">)", EM);
-	m_DrawItems->Insert(LR"(<a id="text0" text="Window" left="0" top="-4" width="80" height="20" z-index="1e-6" border="enable" color-g="0" color-r="0"  color-b="0">)", EME);
-	m_DrawItems->Insert(LR"(<a id="text1" text="Window" left="0" top="18" width="80" height="12" z-index="1e-6" border="enable" color-g="0" color-r="0"  color-b="0">)", EME);
-	m_DrawItems->Insert(LR"(<a id="text2" text="Window" left="0" top="32" width="80" height="12" z-index="1e-6" border="enable" color-g="0" color-r="0"  color-b="0">)", EME);
-
-	std::uint64_t EMEE = m_DrawItems->Insert(LR"(<div id="buttonbar" src="Window" left="13" top="146" width="174" height="20" z-index="1e-6">)", EM);
-	std::uint64_t EMBT = m_DrawItems->Insert(LR"(<img id="button0" src="Button" left="1" top="0" width="56" height="20" z-index="1e-6">)", EMEE);
-	m_DrawItems->Insert(LR"(<a id="text" text="Window" left="0" top="3" width="56" height="15" z-index="1e-6" border="enable" color-g="0" color-r="0"  color-b="0">)", EMBT);
-	EMBT = m_DrawItems->Insert(LR"(<img id="button1" src="Button" left="59" top="0" width="56" height="20" z-index="1e-6">)", EMEE);
-	m_DrawItems->Insert(LR"(<a id="text" text="Window" left="0" top="3" width="56" height="15" z-index="1e-6" border="enable" color-g="0" color-r="0"  color-b="0">)", EMBT);
-	EMBT = m_DrawItems->Insert(LR"(<img id="button2" src="Button" left="117" top="0" width="56" height="20" z-index="1e-6">)", EMEE);
-	m_DrawItems->Insert(LR"(<a id="text" text="Window" left="0" top="3" width="56" height="15" z-index="1e-6" border="enable" color-g="0" color-r="0"  color-b="0">)", EMBT);*/
-
-
-	m_DrawItems->Insert(LR"(<img id="myDiv" src="Cursor" z-index="1e5" left="0" top="0" width="40" height="40" pointer-events="none">)");
+	m_DrawItems->Insert(LR"(<img id="myDiv" src="Cursor" z-index="1e10" left="0" top="0" width="40" height="40" pointer-events="none">)");
 	draw_mutex.unlock();
 	GameLoad(); 
 
@@ -1253,8 +1633,9 @@ void MyApp::GameInit()
 	//trdGame.join();
 }
 
-bool MyApp::Act(std::wstring func_name, std::initializer_list<std::wstring> args, bool need_return)
+std::unordered_map<std::wstring, std::wstring> MyApp::Act(std::wstring func_name, std::initializer_list<std::wstring> args, bool only_test, bool try_lock)
 {
+	std::unordered_map<std::wstring, std::wstring> _Return;
 	std::unordered_map<std::wstring, std::wstring> arg;
 	std::wstring head;
 	for (auto P = args.begin();;)
@@ -1269,32 +1650,67 @@ bool MyApp::Act(std::wstring func_name, std::initializer_list<std::wstring> args
 	{	
 		ProvinceId id = std::stoull(arg[L"location"]);
 		auto prov = m_gamedata->province.find(id);
-		if (prov->second->man >= 1000)
+		std::int64_t draft_size = 1000;
+		NationId owner = 0;
+		bool force = false;
+
+		
+
+		if (arg.find(L"size") != arg.end()) draft_size = Long(arg[L"size"]);
+		if (arg.find(L"owner") != arg.end()) owner = std::stoull(arg[L"owner"]);
+		else if (auto N = m_gamedata->nations.find(prov->second->ruler); N != m_gamedata->nations.end())
+			owner = N->first;
+		if (arg.find(L"force") != arg.end()) force = true;
+		
+		if (prov->second->man >= draft_size || force)
 		{
-			if (need_return)
+			if (only_test)
 			{
-				return true;
+				_Return.insert(std::make_pair(L"SUCCESS", L""));
 			}
-
-			prov->second->man -= 1000;
-
-			wchar_t buf[256];
-			draw_mutex.lock();
-			swprintf_s(buf, LR"(<img id="leader%llu" src="Window" enable="disable" pointer-events="none" gamedata-leaderid="%llu">)", m_gamedata->leader_progress, m_gamedata->leader_progress);
-			std::uint64_t EM = m_DrawItems->Insert(buf);
-			std::wstring nation_name = L"말갈";
-			if (auto N = m_gamedata->nations.find(prov->second->owner); N != m_gamedata->nations.end())
-				nation_name = N->second->MainName;
-			if (prov->second->owner == mUser.nationPick)
-				swprintf_s(buf, LR"(<img id="flag" src="%ls" enable="disable" mousedown="SelectLeader">)", nation_name.c_str());
 			else
-				swprintf_s(buf, LR"(<img id="flag" src="%ls" enable="disable">)", nation_name.c_str());
-			m_gamedata->leaders.insert(std::make_pair(m_gamedata->leader_progress++, std::make_unique<Leader>(m_gamedata->NewLeader(id, prov->second->owner, 1000))));
-			m_DrawItems->Insert(buf, EM);
-			draw_mutex.unlock();
+			{
+				if (!force)	prov->second->man -= draft_size;
+
+				wchar_t buf[256];
+				if (try_lock) draw_mutex.lock();
+				swprintf_s(buf, LR"(<img id="leader%llu" src="Window" enable="disable" pointer-events="none" gamedata-leaderid="%llu">)", m_gamedata->leader_progress, m_gamedata->leader_progress);
+				std::uint64_t EM = m_DrawItems->Insert(buf);
+				std::wstring nation_name = owner > 0 ? m_gamedata->nations.at(owner)->MainName : L"모르는국기";
+				
+				
+				
+
+				m_DrawItems->Insert(LR"(<div id="background" enable="disable" background-color-r="1" background-color-g="1" background-color-b="1" pointer-events="none" background="enable">)", EM);
+				if (owner)
+				{
+					auto Color = m_gamedata->nations.find(owner)->second->MainColor;
+					swprintf_s(buf, LR"(<div id="progress" enable="disable" background-color-r="%f" background-color-g="%f" background-color-b="%f" pointer-events="none" z-index="1e-4" background="enable">)", Color.x, Color.y, Color.z);
+					m_DrawItems->Insert(buf, EM);
+				}
+				else m_DrawItems->Insert(LR"(<div id="progress" enable="disable" background-color="777777" pointer-events="none" z-index="1e-4" background="enable">)", EM);
+				m_DrawItems->Insert(LR"(<a id="num" text="000" enable="disable" color-r="0" color-g="0" color-b="0" pointer-events="none">)", EM);
+				m_DrawItems->Insert(LR"(<img id="state" src="Window" enable="disable" pointer-events="none">)", EM);
+
+				_Return.insert(std::make_pair(L"leaderid", Str(m_gamedata->leader_progress)));
+				auto L = m_gamedata->NewLeader(id, owner, draft_size);
+
+				if (arg.find(L"abb_move") != arg.end()) L.abb_move = Float(arg[L"abb_move"]);
+				if (arg.find(L"abb_sieze") != arg.end()) L.abb_sieze = Float(arg[L"abb_sieze"]);
+
+				m_gamedata->leaders.insert(std::make_pair(m_gamedata->leader_progress++, std::make_unique<Leader>(L)));
+
+				if (prov->second->owner == mUser.nationPick || mUser.nationPick == 0)
+					swprintf_s(buf, LR"(<img id="flag" src="%ls" enable="disable" mousedown="SelectLeader">)", nation_name.c_str());
+				else
+					swprintf_s(buf, LR"(<img id="flag" src="%ls" enable="disable" mousedown="SelectLeader">)", nation_name.c_str());
+				
+				m_DrawItems->Insert(buf, EM);
+				if (try_lock) draw_mutex.unlock();
+			}
 		}
 	}
-	return false;
+	return _Return;
 }
 
 
@@ -1406,7 +1822,7 @@ void MyApp::GUIUpdatePanelProvince(ProvinceId prov_id)
 		return;
 
 	auto N = m_gamedata->nations.find(prov->second->owner);
-	std::wstring nation_name = N == m_gamedata->nations.end() ? L"말갈" : N->second->MainName;
+	std::wstring nation_name = N == m_gamedata->nations.end() ? L"모르는국기" : N->second->MainName;
 
 	m_DrawItems->$(L".myForm").css(
 		{
@@ -1420,23 +1836,23 @@ void MyApp::GUIUpdatePanelProvince(ProvinceId prov_id)
 		{
 			L"text", nation_name
 		});
-	m_DrawItems->$(L".myForm #textContainer text1").css(
+	m_DrawItems->$(L".myForm #textContainer text2").css(
 		{
-			L"text", L"예비군 : " + Str(prov->second->man)
+			L"text", L"예비군 : " + Str(prov->second->man) + L"/" + Str(prov->second->maxman)
 		});
 	m_DrawItems->$(L".myForm #head").css(
 		{
-			L"text", prov->second->name
+			L"text", prov->second->name + L":" + Str(prov->first)
 		});
 	m_DrawItems->$(L".myForm #tail").css(
 		{
 			L"text", L"영토 확인 메뉴"
 		});
-	m_DrawItems->$(L".myForm #textContainer text2").css(
+	m_DrawItems->$(L".myForm #textContainer text1").css(
 		{
-			L"text", L"알 수 없음"
+			L"text", L"성 내구도 : " + Str(prov->second->hp)
 		});
-	if (Act(L"Draft", {L"location", Str(prov->first)}, true))
+	if (auto X = Act(L"Draft", {L"location", Str(prov->first)}, true); X.find(L"SUCCESS") != X.end() && (prov->second->ruler == mUser.nationPick || mUser.nationPick == 0))
 	{
 		m_DrawItems->$(L".myForm #buttonbar button0").css(
 			{
@@ -1480,16 +1896,15 @@ void MyApp::Execute(const std::wstring& func_name, const std::uint64_t& uuid)
 	{
 		if (func_name == L"FormHold")
 		{
-			
 			(*O)[L"hold"] = L"1";
 			(*O)[L"FirstMousePos.x"] = Str(mLastMousePos.x);
 			(*O)[L"FirstMousePos.y"] = Str(mLastMousePos.y);
-			(*O)[L"z-index"] = L"2.5";
+			(*O)[L"z-index"] = Str(O->z_index + 1e-2);
 		}
 		else if (func_name == L"FormUnhold")
 		{
 			(*O)[L"hold"] = L"0";
-			(*O)[L"z-index"] = L"2";
+			(*O)[L"z-index"] = Str(O->z_index - 1e-2);
 		}
 		else if (func_name == L"DraftForP3")
 		{
@@ -1502,7 +1917,7 @@ void MyApp::Execute(const std::wstring& func_name, const std::uint64_t& uuid)
 			auto P = (*m_DrawItems->$(Str(uuid) + L" ..").begin());
 			bool is_select = false;
 			LeaderId leader = std::stoull((*P)[L"gamedata-leaderid"]);
-
+			
 			for (auto& Q : m_gamedata->leaders)
 			{
 				if (Q.first == leader)
@@ -1548,35 +1963,36 @@ void MyApp::Execute(const std::wstring& func_name, const std::uint64_t& uuid)
 
 void MyApp::GameUpdate()
 {
-
-
-	m_DrawItems->$(L"#myNationFlag").css({
-		L"src", m_gamedata->nations.at(mUser.nationPick)->MainName
-		});
-
+	draw_mutex.lock();
+	if (auto N = m_gamedata->nations.find(mUser.nationPick); N != m_gamedata->nations.end())
+	{
+		m_DrawItems->$(L"#myNationFlag").css({
+			L"src", m_gamedata->nations.at(mUser.nationPick)->MainName
+			});
+	}
+	else
+	{
+		m_DrawItems->$(L"#myNationFlag").css({
+			L"src", L"모르는국기"
+			});
+	}
 	m_DrawItems->$(L"#myDiv").css({
 		L"left", Str(mLastMousePos.x),
 		L"top", Str(mLastMousePos.y)
 	});
 
-	
-	for (auto& O : m_DrawItems->$(L".myForm"))
+	for (auto& D : m_DrawItems->data)
 	{
-		if ((*O)[L"hold"] == L"1")
+		if (D[L"hold"] == L"1")
 		{
-			(*O)[L"left"] = Str(Float((*O)[L"left"]) + mLastMousePos.x - Float((*O)[L"FirstMousePos.x"]));
-			(*O)[L"top"] = Str(Float((*O)[L"top"]) + mLastMousePos.y - Float((*O)[L"FirstMousePos.y"]));
-			(*O)[L"FirstMousePos.x"] = Str(mLastMousePos.x);
-			(*O)[L"FirstMousePos.y"] = Str(mLastMousePos.y);
-
-			//O->z_index = 1.f;
+			D[L"left"] = Str(D.left + mLastMousePos.x - Float(D[L"FirstMousePos.x"]));
+			D[L"top"] = Str(D.top + mLastMousePos.y - Float(D[L"FirstMousePos.y"]));
+			D[L"FirstMousePos.x"] = Str(mLastMousePos.x);
+			D[L"FirstMousePos.y"] = Str(mLastMousePos.y);
 		}
-		else
-		{
-			//O->z_index = 0.f;
-		}
-
 	}
+
+	
 
 	XMFLOAT4 rgb;
 	std::list<decltype(m_gamedata->leaders)::value_type> itr_buf;
@@ -1640,7 +2056,7 @@ void MyApp::GameUpdate()
 					L"enable", L"enable",
 					L"width", Str(w),
 					L"height", Str(h),
-					L"text", O.second->name,
+					L"text", O.second->name,// + L" " + */Str(O.first) ,
 					L"z-index", Str(1 - depth + 1e-6),
 					L"horizontal-align", L"center",
 					L"vertical-align", L"center"
@@ -1698,6 +2114,93 @@ void MyApp::GameUpdate()
 						L"vertical-align", L"center"
 					}
 				);
+				std::wstring state = L"";
+
+				if (P.second->cmd.size() > 0)
+				{
+					switch (P.second->cmd.begin()->type)
+					{
+					case CommandType::Move:
+						state = L"Leader-move";
+						break;
+					case CommandType::Attack:
+						state = L"Leader-attack";
+						break;
+					case CommandType::Sieze:
+						state = L"Leader-sieze";
+						break;
+					}
+				}
+
+
+
+				m_DrawItems->$(L"#leader" + Str(P.first) + L" state").css(
+					{
+						L"src", state,
+						L"enable", state == L"" ? L"disable" : L"enable",
+						L"width", Str(size * 95.f / 32 * 26),
+						L"height",Str(size * 95.f / 32 * 26),
+						L"z-index", Str(2 - depth),
+						L"horizontal-align", L"center",
+						L"vertical-align", L"center"
+					}
+				);
+				m_DrawItems->$(L"#leader" + Str(P.first) + L" num").css(
+					{
+						L"text", Str(P.second->size),
+						L"enable", L"enable",
+						L"width", Str(size * 95.f / 32 * 26),
+						L"top", Str(size * 95.f / 32 * 26 * 2 / 3),
+						L"height",Str(size * 95.f / 32 * 26 / 3),
+						L"z-index", Str(3 - depth),
+						L"horizontal-align", L"center",
+						L"vertical-align", L"top"
+					}
+				);
+				m_DrawItems->$(L"#leader" + Str(P.first) + L" background").css(
+					{
+						L"enable", L"enable",
+						L"left", Str(-size * 95.f / 32 * 13),
+						L"width", Str(size * 95.f / 32 * 26),
+						L"top", Str(size * 95.f / 32 * 26 * 1 / 3),
+						L"height",Str(size * 95.f / 32 * 26 / 4),
+						L"z-index", Str(2 - depth),
+						L"horizontal-align", L"left",
+						L"vertical-align", L"bottom"
+					}
+				);
+
+				if (P.second->cmd.size() > 0)
+				{
+					m_DrawItems->$(L"#leader" + Str(P.first) + L" progress").css(
+						{
+							L"enable", L"enable",
+							L"left", Str(-size * 95.f / 32 * 13),
+							L"width", Str(size * 95.f / 32 * 26 * (P.second->cmd_pr / P.second->cmd.begin()->need)),
+							L"top", Str(size * 95.f / 32 * 26 * 1 / 3),
+							L"height",Str(size * 95.f / 32 * 26 / 4),
+							L"z-index", Str(2 - depth),
+							L"horizontal-align", L"left",
+							L"vertical-align", L"bottom"
+						}
+					);
+				}
+				else
+				{
+					m_DrawItems->$(L"#leader" + Str(P.first) + L" progress").css(
+						{
+							L"enable", L"enable",
+							L"left", Str(-size * 95.f / 32 * 13),
+							L"width", Str(size * 95.f / 32 * 26),
+							L"top", Str(size * 95.f / 32 * 26 * 1 / 3),
+							L"height",Str(size * 95.f / 32 * 26 / 4),
+							L"z-index", Str(2 - depth),
+							L"horizontal-align", L"left",
+							L"vertical-align", L"bottom"
+						}
+					);
+				}
+
 			}
 			else
 			{
@@ -1707,6 +2210,26 @@ void MyApp::GameUpdate()
 					}
 				);
 				m_DrawItems->$(L"#leader" + Str(P.first) + L" flag").css(
+					{
+						L"enable", L"disable"
+					}
+				);
+				m_DrawItems->$(L"#leader" + Str(P.first) + L" state").css(
+					{
+						L"enable", L"disable"
+					}
+				);
+				m_DrawItems->$(L"#leader" + Str(P.first) + L" num").css(
+					{
+						L"enable", L"disable"
+					}
+				);
+				m_DrawItems->$(L"#leader" + Str(P.first) + L" background").css(
+					{
+						L"enable", L"disable"
+					}
+				);
+				m_DrawItems->$(L"#leader" + Str(P.first) + L" progress").css(
 					{
 						L"enable", L"disable"
 					}
@@ -1733,23 +2256,24 @@ void MyApp::GameUpdate()
 	{
 		if (O.parent > 0)
 		{
-			O[L"position-left"] = L"0";
-			O[L"position-top"] = L"0";
+			O[L"inherit-left"] = L"0";
+			O[L"inherit-top"] = L"0";
 			O[L"inherit-z-index"] = L"0";
-			for (auto P : m_DrawItems->withUUID(O.parent))
+			for (auto& P : m_DrawItems->withUUID(O.parent))
 			{
-				O[L"position-left"] = Str(Float((*P)[L"position-left"]) + Float((*P)[L"left"]));
-				O[L"position-top"] = Str(Float((*P)[L"position-top"]) + Float((*P)[L"top"]));
-				O[L"inherit-z-index"] = Str(Float((*P)[L"inherit-z-index"]) + Float((*P)[L"z-index"]));
+				O[L"inherit-left"] = Str(P->inherit_left + P->left);
+				O[L"inherit-top"] = Str(P->inherit_top + P->top);
+				O[L"inherit-z-index"] = Str(P->inherit_z_index + P->z_index);
 			}
 		}
 		else
 		{
-			O[L"position-left"] = L"0";
-			O[L"position-top"] = L"0";
+			O[L"inherit-left"] = L"0";
+			O[L"inherit-top"] = L"0";
 			O[L"inherit-z-index"] = L"0";
 		}
 	}
+	draw_mutex.unlock();
 
 	mEyetarget.m128_f32[0] += mEyeMoveX;
 	mEyetarget.m128_f32[2] += mEyeMoveZ;
@@ -1891,6 +2415,20 @@ void MyApp::ProvinceMousedown(WPARAM btnState, ProvinceId id)
 	{
 		if (btnState & MK_LBUTTON)
 		{
+			mArrows.vertices.clear();
+			mArrows.indices.clear();
+			for (auto& O : m_gamedata->leaders)
+			{
+				if (O.second->selected)
+				{
+					m_DrawItems->$(L"#leader" + Str(O.first)).css(
+						{
+							L"src", L"Window"
+						}
+					);
+					O.second->selected = false;
+				}
+			}
 			game_contype = GameControlType::View;
 		}
 		else if (btnState & MK_RBUTTON)
@@ -1910,6 +2448,9 @@ void MyApp::ProvinceMousedown(WPARAM btnState, ProvinceId id)
 
 	if (btnState & MK_LBUTTON)
 	{
+		/*prov->second->owner = mUser.nationPick;
+		prov->second->ruler = mUser.nationPick;*/
+
 		mArrows.vertices.clear();
 		mArrows.indices.clear();
 		for (auto& O : m_gamedata->leaders)
@@ -1926,31 +2467,6 @@ void MyApp::ProvinceMousedown(WPARAM btnState, ProvinceId id)
 		}
 		GUIUpdatePanelProvince(id);
 		game_contype = GameControlType::View;
-		/*if (prov->second->owner == 0)
-		{
-			prov->second->ruler = mUser.nationPick;
-			prov->second->owner = mUser.nationPick;
-		}
-		else if (prov->second->ruler != mUser.nationPick)
-		{
-			prov->second->ruler = mUser.nationPick;
-		}
-		else if (prov->second->owner != mUser.nationPick)
-		{
-			prov->second->owner = mUser.nationPick;
-		}
-		else
-		{
-			wchar_t buf[256];
-			swprintf_s(buf, LR"(<img id="leader%d" src="Window" enable="disable">)", m_gamedata->leader_progress);
-			m_DrawItems->Insert(buf);
-			if (auto N = m_gamedata->nations.find(prov->second->owner); N == m_gamedata->nations.end())
-				swprintf_s(buf, LR"(<img id="leaderflag%d" src="말갈" enable="disable">)", m_gamedata->leader_progress);
-			else
-				swprintf_s(buf, LR"(<img id="leaderflag%d" src="%ls" enable="disable">)", m_gamedata->leader_progress, N->second->MainName.c_str());
-			m_gamedata->leaders.push_back(std::make_unique<Leader>(m_gamedata->NewLeader(id, prov->second->owner)));
-			m_DrawItems->Insert(buf);
-		}*/
 	}
 	else if (btnState & MK_RBUTTON)
 	{
@@ -1993,17 +2509,18 @@ void MyApp::ProvinceMousedown(WPARAM btnState, ProvinceId id)
 	}
 	else if (btnState & MK_MBUTTON)
 	{
+		if (mUser.nationPick > 0) m_gamedata->nations.at(mUser.nationPick)->Ai = true;
+		
 
-		if (const auto& O = m_gamedata->nations.find(prov->second->owner); O != m_gamedata->nations.end())
-		{
-			mUser.nationPick = prov->second->owner;
-			captions[L"선택한 국가"] = O->second->MainName;
-		}
-		else
-		{
-			mUser.nationPick = 0;
-			captions[L"선택한 국가"] = L"미개인";
-		}
+		mUser.nationPick = prov->second->ruler;
+		if (mUser.nationPick > 0) m_gamedata->nations.at(mUser.nationPick)->Ai = false;
+		/*else {
+			auto I = m_gamedata->nations.begin();
+			for (int i = 0; i < rand() % m_gamedata->nations.size(); ++i) ++I;
+			prov->second->owner = I->first;
+			prov->second->ruler = I->first;
+			
+		}*/
 	}
 
 }
@@ -2060,17 +2577,105 @@ void MyApp::OnKeyDown(WPARAM btnState)
 		{
 			mEyeMoveX -= pressShift ? 0.48f : 0.24f * mRadius * deltaTime;
 		}
-		if (keyState.at('D'))
+		else if (keyState.at('D'))
 		{
 			mEyeMoveX += pressShift ? 0.48f : 0.24f * mRadius * deltaTime;
 		}
-		if (keyState.at('W'))
+		else if (keyState.at('W'))
 		{
 			mEyeMoveZ += pressShift ? 0.48f : 0.24f * mRadius * deltaTime;
 		}
-		if (keyState.at('S'))
+		else if (keyState.at('S'))
 		{
 			mEyeMoveZ -= pressShift ? 0.48f : 0.24f * mRadius * deltaTime;
+		}
+		else if (keyState.at('1')) //Tang Invasion
+		{
+			NationId owner = 0;
+			for (auto& N : m_gamedata->nations) if (N.second->MainName == L"당나라") { owner = N.first; break; };
+
+			Act(L"Draft", { L"location", L"18", L"size", L"25000", L"owner", Str(owner), L"force", L"" });
+		}
+		else if (keyState.at('2')) //Magal Invasion
+		{
+			NationId owner = 0;
+			for (auto& N : m_gamedata->nations) if (N.second->MainName == L"말갈") { owner = N.first; break; };
+
+			draw_mutex.lock();
+			Act(L"Draft", { L"location", L"16", L"size", L"3500", L"owner", Str(owner), L"force", L"" }, false, false);
+			Act(L"Draft", { L"location", L"16", L"size", L"2500", L"owner", Str(owner), L"force", L"" }, false, false);
+			Act(L"Draft", { L"location", L"16", L"size", L"1500", L"owner", Str(owner), L"force", L"" }, false, false);
+			draw_mutex.unlock();
+		}
+		else if (keyState.at('3')) //We Invasion
+		{
+			NationId owner = 0;
+			for (auto& N : m_gamedata->nations) if (N.second->MainName == L"왜") { owner = N.first; break; };
+
+			draw_mutex.lock();
+			Act(L"Draft", { L"location", L"2", L"size", L"900", L"owner", Str(owner), L"force", L"" }, false, false);
+			Act(L"Draft", { L"location", L"3", L"size", L"900", L"owner", Str(owner), L"force", L"" }, false, false);
+			Act(L"Draft", { L"location", L"4", L"size", L"900", L"owner", Str(owner), L"force", L"" }, false, false);
+			Act(L"Draft", { L"location", L"7", L"size", L"900", L"owner", Str(owner), L"force", L"" }, false, false);
+			draw_mutex.unlock();
+		}
+		else if (keyState.at('4')) //Yuan Invasion
+		{
+			NationId owner = 0;
+			for (auto& N : m_gamedata->nations) if (N.second->MainName == L"원나라") { owner = N.first; break; };
+			draw_mutex.lock();
+			for (int i = 0; i < 3; i++)
+			{
+				Act(L"Draft", { L"location", L"18", L"size", L"12000", L"owner", Str(owner), L"force", L"", L"abb_sieze", L"2", L"abb_move", L"3" }, false, false);
+			}
+			draw_mutex.unlock();
+		}
+		else if (keyState.at('5')) //Joseon Revolt
+		{
+			NationId owner = 0;
+			for (auto& N : m_gamedata->nations) if (N.second->MainName == L"조선") { owner = N.first; break; };
+
+			Act(L"Draft", { L"location", L"12", L"size", L"13000", L"owner", Str(owner), L"force", L"" });
+		}
+		else if (keyState.at('6')) //Goryeo Revolt
+		{
+			NationId owner = 0;
+			for (auto& N : m_gamedata->nations) if (N.second->MainName == L"고려") { owner = N.first; break; };
+
+			draw_mutex.lock();
+			for (int i = 0; i < 3; i++)
+			{
+				Act(L"Draft", { L"location", L"7", L"size", L"5000", L"owner", Str(owner), L"force", L"" }, false, false);
+			}
+			draw_mutex.unlock();
+		}
+		else if (keyState.at('7')) //Gaya Revolt
+		{
+			NationId owner = 0;
+			for (auto& N : m_gamedata->nations) if (N.second->MainName == L"가야") { owner = N.first; break; };
+
+			Act(L"Draft", { L"location", L"3", L"size", L"4000", L"owner", Str(owner), L"force", L"" });
+		}
+		else if (keyState.at('8')) //Balhae Revolt
+		{
+			NationId owner = 0;
+			for (auto& N : m_gamedata->nations) if (N.second->MainName == L"발해") { owner = N.first; break; };
+
+			Act(L"Draft", { L"location", L"15", L"size", L"7000", L"owner", Str(owner), L"force", L"" });
+		}
+		else if (keyState.at('9')) //Balhae Revolt
+		{
+			NationId owner = 0;
+			for (auto& N : m_gamedata->nations) if (N.second->MainName == L"한국") { owner = N.first; break; };
+
+			Act(L"Draft", { L"location", L"8", L"size", L"8000", L"owner", Str(owner), L"force", L"" });
+		}
+		else if (keyState.at('0')) //Balhae Revolt
+		{
+			NationId owner = 0;
+			for (auto& N : m_gamedata->nations) if (N.second->MainName == L"낙랑") { owner = N.first; break; };
+
+			Act(L"Draft", { L"location", L"9", L"size", L"20000", L"owner", Str(owner), L"force", L"" });
 		}
 		break;
 	}
@@ -2079,9 +2684,6 @@ void MyApp::OnKeyDown(WPARAM btnState)
 	{
 	case VK_SPACE:
 	{
-		const auto& key = std::next(std::begin(m_gamedata->nations), rand() % m_gamedata->nations.size());
-		captions[L"선택한 국가"] = key->second->MainName;
-		mUser.nationPick = key->first;
 		return;
 	}
 	case VK_INSERT:
@@ -2504,7 +3106,7 @@ void MyApp::OnMouseUp(WPARAM btnState, int x, int y)
 				{
 					for (auto& L : m_gamedata->leaders)
 					{
-						if (L.second->location == O.first)
+						if (L.second->location == O.first && (L.second->owner == mUser.nationPick || mUser.nationPick == 0))
 						{
 							m_DrawItems->$(L"#leader" + Str(L.first)).css(
 								{
@@ -2538,16 +3140,16 @@ std::list<YTML::DrawItem>::reverse_iterator MyApp::MouseOnUI(int x, int y)
 	draw_mutex.lock();
 	for (auto O = m_DrawItems->data.rbegin(); O != m_DrawItems->data.rend(); ++O)
 	{
-		if ((*O)[L"enable"] == L"disable")
+		if (!O->enable || (*O)[L"pointer-events"] == L"none")
 			continue;
 
-		Draw_point.x = Float((*O)[L"left"]);
-		Draw_point.y = Float((*O)[L"top"]);
-		Draw_point.x += Float((*O)[L"position-left"]);
-		Draw_point.y += Float((*O)[L"position-top"]);
+		Draw_point.x = O->left;
+		Draw_point.y = O->top;
+		Draw_point.x += O->inherit_left;
+		Draw_point.y += O->inherit_top;
 
-		Draw_size.width = Float((*O)[L"width"]);
-		Draw_size.height = Float((*O)[L"height"]);
+		Draw_size.width = O->width;
+		Draw_size.height = O->height;
 
 		if ((*O)[L"horizontal-align"] == L"center")
 		{
@@ -2582,7 +3184,7 @@ std::list<YTML::DrawItem>::reverse_iterator MyApp::MouseOnUI(int x, int y)
 		}
 
 		if (Draw_rect.left <= x && Draw_rect.right >= x &&
-			Draw_rect.top <= y && Draw_rect.bottom >= y && (*O)[L"pointer-events"] != L"none")
+			Draw_rect.top <= y && Draw_rect.bottom >= y)
 		{
 			draw_mutex.unlock();
 			return O;
@@ -3854,5 +4456,6 @@ std::array<const CD3DX12_STATIC_SAMPLER_DESC, 6> MyApp::GetStaticSamplers()
 		linearWrap, linearClamp,
 		anisotropicWrap, anisotropicClamp };
 }
+
 
 
