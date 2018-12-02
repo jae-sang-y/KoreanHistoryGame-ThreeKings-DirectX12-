@@ -127,6 +127,10 @@ struct Nation
 	std::wstring MainName = L"오류";
 	std::unordered_map<std::wstring, std::wstring> flag;
 	bool Ai = true;
+
+	float abb_man = 1;
+	float abb_army_sieze = 1;
+	float abb_army_move = 1;
 };
 enum class CommandType
 {
@@ -605,6 +609,14 @@ void MyApp::MainGame() //!@
 					Act(L"Draft", { L"location", Str(O.first), L"size", Str(O.second->man), L"owner", Str(O.second->owner) });
 				}
 			}
+			if (O.second->owner == O.second->ruler)
+			{
+				auto& N = m_gamedata->nations.find(O.second->ruler);
+				if (N != m_gamedata->nations.end())
+				{
+					O.second->man += (int64_t)round(min(max((O.second->maxman - O.second->man) / 1200.0 * N->second->abb_man, -10), 10));
+				}
+			}
 
 			if (O.second->hp < 0) O.second->hp = 0;
 			else if (O.second->hp >= 1000)
@@ -847,7 +859,7 @@ void MyApp::MainGame() //!@
 					auto& P = m_gamedata->province[p];
 					if (N.first == P->ruler && P->man >= 1000)
 					{
-						if (auto X = Act(L"Draft", { L"location", Str(p), L"size", Str(P->man) }); X.find(L"SUCCESS") != X.end()) ++LeaderCount;
+						if (auto X = Act(L"Draft", { L"location", Str(p), L"size", Str(P->man), L"owner", Str(P->owner), L"abb_sieze", Str(N.second->abb_army_sieze), L"abb_move", Str(N.second->abb_army_move) }); X.find(L"SUCCESS") != X.end()) ++LeaderCount;
 					}
 				}
 
@@ -915,7 +927,9 @@ void MyApp::MainGame() //!@
 					if (!(myLeaderCount < myProvCount / 2 + 1))break;
 					if (N.first == P.second->ruler && P.second->man >= 1000)
 					{
-						Act(L"Draft", { L"location", Str(P.first), L"size", Str(P.second->man) });
+
+						Act(L"Draft", { L"location", Str(P.first), L"size", Str(P.second->man), L"owner", Str(P.second->owner), L"abb_sieze", Str(N.second->abb_army_sieze), L"abb_move", Str(N.second->abb_army_move) });
+
 						++myLeaderCount;
 					}
 				}
@@ -1509,6 +1523,7 @@ void MyApp::GameInit()
 		std::unique_ptr<Nation> 말갈 = std::make_unique<Nation>();
 		말갈->MainColor = XMFLOAT4(0.25f, 0.0f, 0.0f, 0.75f);
 		말갈->MainName = L"말갈";
+		말갈->abb_man = 1.2f;
 		m_gamedata->nations[++nation_count] = std::move(말갈);
 
 		std::unique_ptr<Nation> 왜 = std::make_unique<Nation>();
@@ -1519,6 +1534,9 @@ void MyApp::GameInit()
 		std::unique_ptr<Nation> 원나라 = std::make_unique<Nation>();
 		원나라->MainColor = XMFLOAT4(0.3f, 0.5f, 0.8f, 0.75f);
 		원나라->MainName = L"원나라";
+		원나라->abb_man = 0.2f;
+		원나라->abb_army_move = 5.f;
+		원나라->abb_army_sieze = 4.f;
 		m_gamedata->nations[++nation_count] = std::move(원나라);
 
 
@@ -2626,7 +2644,7 @@ void MyApp::OnKeyDown(WPARAM btnState)
 			draw_mutex.lock();
 			for (int i = 0; i < 3; i++)
 			{
-				Act(L"Draft", { L"location", L"18", L"size", L"12000", L"owner", Str(owner), L"force", L"", L"abb_sieze", L"2", L"abb_move", L"3" }, false, false);
+				Act(L"Draft", { L"location", L"18", L"size", L"12000", L"owner", Str(owner), L"force", L"", L"abb_sieze", L"4", L"abb_move", L"5" }, false, false);
 			}
 			draw_mutex.unlock();
 		}
@@ -3544,8 +3562,8 @@ void MyApp::BuildDescriptorHeaps()
 	// next descriptor
 	hDescriptor.Offset(1, mCbvSrvDescriptorSize);
 
-	srvDesc.Format = arrowTex->GetDesc().Format;
-	md3dDevice->CreateShaderResourceView(arrowTex.Get(), &srvDesc, hDescriptor);
+	//srvDesc.Format = arrowTex->GetDesc().Format;
+	//md3dDevice->CreateShaderResourceView(arrowTex.Get(), &srvDesc, hDescriptor);
 }
 
 void MyApp::BuildShadersAndInputLayout()
@@ -4250,7 +4268,7 @@ void MyApp::BuildRenderItems()
 #else
 	arrowRitem->PrimitiveType = D3D11_PRIMITIVE_TOPOLOGY_LINESTRIP;
 #endif
-	arrowRitem->Mat = mMaterials["arrow"].get();
+	arrowRitem->Mat = mMaterials["wirefence"].get();
 	arrowRitem->Geo = mGeometries["arrowGeo"].get();
     arrowRitem->Bounds = arrowRitem->Geo->DrawArgs["arrow"].Bounds;
 	arrowRitem->IndexCount = arrowRitem->Geo->DrawArgs["arrow"].IndexCount;
