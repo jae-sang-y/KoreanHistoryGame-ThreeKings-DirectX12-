@@ -128,9 +128,16 @@ struct Nation
 	std::unordered_map<std::wstring, std::wstring> flag;
 	bool Ai = true;
 
+	float abb_disp = 1;
 	float abb_man = 1;
 	float abb_army_sieze = 1;
 	float abb_army_move = 1;
+	float abb_attr = 1;
+
+	size_t own_province = 0;
+	size_t rule_province = 0;
+
+	NationId rival = -1;
 };
 enum class CommandType
 {
@@ -166,6 +173,7 @@ struct Leader
 
 	float abb_sieze = 1;
 	float abb_move = 1;
+	float abb_disp = 1;
 
 	NationId owner;
 	Leader(const ProvinceId& loc, const NationId& own, const std::int64_t& _size) : location(loc), owner(own), size(_size) {};
@@ -598,6 +606,11 @@ void MyApp::MainGame() //!@
 	bool flag_update_leaders = false;
 	while (m_gamedata->run)
 	{
+		for (auto& N : m_gamedata->nations)
+		{
+			N.second->own_province = 0;
+			N.second->rule_province = 0;
+		}
 		for (auto& O : m_gamedata->province)
 		{
 			O.second->man += (int64_t)round(min(max((O.second->maxman - O.second->man)/1200.0,-10),10));
@@ -617,6 +630,10 @@ void MyApp::MainGame() //!@
 					O.second->man += (int64_t)round(min(max((O.second->maxman - O.second->man) / 1200.0 * N->second->abb_man, -10), 10));
 				}
 			}
+
+			if (auto & N = m_gamedata->nations.find(O.second->owner); N != m_gamedata->nations.end()) ++N->second->own_province;
+			if (auto & N = m_gamedata->nations.find(O.second->ruler); N != m_gamedata->nations.end()) ++N->second->rule_province;
+			
 
 			if (O.second->hp < 0) O.second->hp = 0;
 			else if (O.second->hp >= 1000)
@@ -658,7 +675,14 @@ void MyApp::MainGame() //!@
 		{
 			if (O.second->owner != m_gamedata->province.at(O.second->location)->ruler)
 			{
-				//O.second->size = (std::int64_t)std::round(O.second->size * 0.997);
+				if (const auto & N = m_gamedata->nations.find(m_gamedata->province.at(O.second->location)->ruler); N != m_gamedata->nations.end())
+				{
+					O.second->size -= (std::int64_t)std::round(O.second->size * N->second->abb_attr / 10000.f * 2 * rand() / RAND_MAX);
+				}
+				else
+				{
+					O.second->size -= (std::int64_t)std::round(O.second->size * 5 / 10000.f * 2 * rand() / RAND_MAX);
+				}
 				///if (O.second->size > 1000) O.second->size -= (O.second->size - 1000) / 10000;
 			}
 			else 
@@ -787,8 +811,23 @@ void MyApp::MainGame() //!@
 		//AI
 		for (auto& N : m_gamedata->nations)
 		{
-			if (N.second->Ai)
+			if (N.second->Ai && N.second->own_province > 0 && N.second->rule_province > 0)
 			{
+				if (N.second->rival != -1)
+				{
+					if (auto & n = m_gamedata->nations.find(N.second->rival); n != m_gamedata->nations.end())
+					{
+						if (n->second->own_province == 0 && n->second->rule_province == 0)
+						{
+							N.second->rival = -1;
+						}
+					}
+					else
+					{
+						N.second->rival = -1;
+					}
+				}
+
 				std::list<ProvinceId> myProv;
 				std::list<LeaderId> myLead;
 
@@ -811,11 +850,11 @@ void MyApp::MainGame() //!@
 					{
 						if (P.second->ruler == N.first)	 //적 영토의 내 소유
 						{
-							P.second->prioriy = 1 * (2000 - P.second->hp);
+							P.second->prioriy = 2 * (2000 - P.second->hp) * (N.second->rival == P.second->ruler ? 2 : 1);
 						}
 						else							 //적 영토의 적 소유
 						{
-							P.second->prioriy = 2 * (2000 - P.second->hp);
+							P.second->prioriy = 1 * (2000 - P.second->hp) * (N.second->rival == P.second->ruler ? 2 : 1);
 						}
 					}
 				}
@@ -840,15 +879,57 @@ void MyApp::MainGame() //!@
 						if (P->ruler == N.first)// 내 땅에 내 군사
 							P->prioriy -= 2 * L.second->size;
 						else					// 남 땅에 내 군사
-							P->prioriy -= 0.1f * L.second->size;
+							P->prioriy -= 0.1f * L.second->size * (N.second->rival == P->owner ? 0.5f : 1.f);
 					}
 					else
 					{
 						P->require += L.second->size;
 						if (P->ruler == N.first)// 내 땅에 남 군사
-							P->prioriy += 2 * L.second->size;
+							P->prioriy += 2 * L.second->size * (N.second->rival == P->owner ? 2 : 1);
 						else					// 남 땅에 남 군사
-							P->prioriy -= 1 * L.second->size;
+							P->prioriy -= 1 * L.second->size * (N.second->rival == P->owner ? 0.5 : 1);
+					}
+				}
+
+				if (N.second->rival == -1)
+				{
+					float syn = -FLT_MAX;
+					for (auto& n : m_gamedata->nations)
+					{
+						if (n.second->own_province > 0 && n.second->rule_province > 0 && n.first != N.first)
+						{
+							float my_syn = 0;
+							for (auto& P : m_gamedata->province)
+							{
+								if (P.second->owner == N.first && P.second->ruler == n.first)
+								{
+									my_syn += P.second->maxman / 1000.f;
+								}
+								else if (P.second->ruler == N.first && P.second->owner == n.first)
+								{
+									my_syn += P.second->maxman / 1000.f;
+								}
+								else if (P.second->ruler == n.first && P.second->owner == n.first)
+								{
+									float distance = FLT_MAX;
+									for (const auto& p : myProv)
+									{
+										auto path = ProvincePath(m_gamedata->province, m_gamedata->province_connect, P.first, p);
+										if (path.path.size() > 0)
+										{
+											if (path.length < distance)
+												distance = path.length;
+										}
+									}
+									my_syn += (P.second->maxman / 1000.f) * 30 / pow(distance, 2);
+								}
+							}
+							if (my_syn > syn)
+							{
+								syn = my_syn;
+								N.second->rival = n.first;
+							}
+						}
 					}
 				}
 
@@ -1502,6 +1583,7 @@ void MyApp::GameInit()
 		std::unique_ptr<Nation> 신라 = std::make_unique<Nation>();
 		신라->MainColor = XMFLOAT4(0.5f, 0.5f, 0.1f, 0.75f);
 		신라->MainName = L"신라";
+		신라->abb_attr = 2;
 		m_gamedata->nations[++nation_count] = std::move(신라);
 
 		std::unique_ptr<Nation> 백제 = std::make_unique<Nation>();
@@ -1513,6 +1595,7 @@ void MyApp::GameInit()
 		std::unique_ptr<Nation> 고구려 = std::make_unique<Nation>();
 		고구려->MainColor = XMFLOAT4(0.4f, 0.0f, 0.0f, 0.75f);
 		고구려->MainName = L"고구려";
+		고구려->abb_attr = 3;
 		m_gamedata->nations[++nation_count] = std::move(고구려);
 
 		std::unique_ptr<Nation> 당나라 = std::make_unique<Nation>();
@@ -1524,11 +1607,14 @@ void MyApp::GameInit()
 		말갈->MainColor = XMFLOAT4(0.25f, 0.0f, 0.0f, 0.75f);
 		말갈->MainName = L"말갈";
 		말갈->abb_man = 1.2f;
+		말갈->abb_attr = 6;
 		m_gamedata->nations[++nation_count] = std::move(말갈);
 
 		std::unique_ptr<Nation> 왜 = std::make_unique<Nation>();
 		왜->MainColor = XMFLOAT4(1.0f, 0.25f, 0.25f, 0.75f);
 		왜->MainName = L"왜";
+		왜->abb_man = 1.5f;
+		왜->abb_attr = 12;
 		m_gamedata->nations[++nation_count] = std::move(왜);
 
 		std::unique_ptr<Nation> 원나라 = std::make_unique<Nation>();
@@ -1548,21 +1634,27 @@ void MyApp::GameInit()
 		std::unique_ptr<Nation> 고려 = std::make_unique<Nation>();
 		고려->MainColor = XMFLOAT4(1.f, 0.f, 0.f, 0.75f);
 		고려->MainName = L"고려";
+		고려->abb_man = 1.25f;
 		m_gamedata->nations[++nation_count] = std::move(고려);
 
 		std::unique_ptr<Nation> 가야 = std::make_unique<Nation>();
 		가야->MainColor = XMFLOAT4(0.25f, 0.5f, 0.0625f, 0.75f);
 		가야->MainName = L"가야";
+		가야->abb_man = 1.5f;
+		가야->abb_attr = 8;
 		m_gamedata->nations[++nation_count] = std::move(가야);
 
 		std::unique_ptr<Nation> 한국 = std::make_unique<Nation>();
 		한국->MainColor = XMFLOAT4(1.f, 1.f, 1.f, 0.75f);
 		한국->MainName = L"한국";
+		한국->abb_attr = 0.75f;
+		한국->abb_man = 10;
 		m_gamedata->nations[++nation_count] = std::move(한국);
 
 		std::unique_ptr<Nation> 발해 = std::make_unique<Nation>();
 		발해->MainColor = XMFLOAT4(0.75f, 0.5f, 1.f, 0.75f);
 		발해->MainName = L"발해";
+		발해->abb_attr = 2;
 		m_gamedata->nations[++nation_count] = std::move(발해);
 
 		std::unique_ptr<Nation> 낙랑 = std::make_unique<Nation>();
@@ -1617,29 +1709,46 @@ void MyApp::GameInit()
 	}
 	{
 		std::uint64_t EME;
-		std::uint64_t EM = m_DrawItems->Insert(LR"(<img class="consoleForm" src="Form" left="79" top="157" width="167" height="284" mousedown="FormHold" mouseup="FormUnhold" z-index="1000">)");
+		std::uint64_t EM = m_DrawItems->Insert(LR"(<img class="consoleForm" src="Form" left="79" top="157" width="167" height="439" mousedown="FormHold" mouseup="FormUnhold" z-index="1000">)");
 		
-		m_DrawItems->Insert(LR"(<a id="head" text="이벤트 시작" left="16" top="35" width="135" height="28" z-index="1e-4" pointer-events="none" color-g="0" color-r="0"  color-b="0">)", EM);
+		m_DrawItems->Insert(LR"(<a id="head" text="이벤트 시작" left="16" top="50" width="135" height="28" z-index="1e-4" pointer-events="none" color-g="0" color-r="0"  color-b="0">)", EM);
 		
-		EME = m_DrawItems->Insert(LR"(<img id="button0" src="Button" left="10" top="72" width="149" height="31" z-index="1e-4">)", EM);
-		m_DrawItems->Insert(LR"(<a id="text" text="1" left="0" top="0" width="149" height="31" z-index="2e-4" pointer-events="none" color-hex="FFFFFF">)", EME);
+		EME = m_DrawItems->Insert(LR"(<img id="button0" src="Button" left="10" top="72" width="149" height="31" z-index="1e-4" mousedown="button0">)", EM);
+		m_DrawItems->Insert(LR"(<a id="text" text="당나라 침공" left="0" top="0" width="149" height="31" z-index="2e-4" pointer-events="none" color-hex="FFFFFF">)", EME);
 		
-		EME = m_DrawItems->Insert(LR"(<img id="button1" src="Button" left="10" top="103" width="149" height="31" z-index="1e-4">)", EM);
-		m_DrawItems->Insert(LR"(<a id="text" text="2" left="0" top="0" width="149" height="31" z-index="1e10" pointer-events="none" color-hex="FFFFFF">)", EME);
+		EME = m_DrawItems->Insert(LR"(<img id="button1" src="Button" left="10" top="103" width="149" height="31" z-index="1e-4" mousedown="button1">)", EM);
+		m_DrawItems->Insert(LR"(<a id="text" text="말갈족의 남하" left="0" top="0" width="149" height="31" z-index="1e10" pointer-events="none" color-hex="FFFFFF">)", EME);
 		
-		EME = m_DrawItems->Insert(LR"(<img id="button2" src="Button" left="10" top="134" width="149" height="31" z-index="1e-4">)", EM);
-		m_DrawItems->Insert(LR"(<a id="text" text="3" left="0" top="0" width="149" height="31" z-index="2e-4" pointer-events="none" color-hex="FFFFFF">)", EME);
+		EME = m_DrawItems->Insert(LR"(<img id="button2" src="Button" left="10" top="134" width="149" height="31" z-index="1e-4" mousedown="button2">)", EM);
+		m_DrawItems->Insert(LR"(<a id="text" text="왜구의 침략" left="0" top="0" width="149" height="31" z-index="2e-4" pointer-events="none" color-hex="FFFFFF">)", EME);
 		
-		EME = m_DrawItems->Insert(LR"(<img id="button3" src="Button" left="10" top="165" width="149" height="31" z-index="1e-4">)", EM);
-		m_DrawItems->Insert(LR"(<a id="text" text="4" left="0" top="0" width="149" height="31" z-index="2e-4" pointer-events="none" color-hex="FFFFFF">)", EME);
+		EME = m_DrawItems->Insert(LR"(<img id="button3" src="Button" left="10" top="165" width="149" height="31" z-index="1e-4" mousedown="button3">)", EM);
+		m_DrawItems->Insert(LR"(<a id="text" text="원나라의 부흥" left="0" top="0" width="149" height="31" z-index="2e-4" pointer-events="none" color-hex="FFFFFF">)", EME);
 		
-		EME = m_DrawItems->Insert(LR"(<img id="button4" src="Button" left="10" top="196" width="149" height="31" z-index="1e-4">)", EM);
-		m_DrawItems->Insert(LR"(<a id="text" text="5" left="0" top="0" width="149" height="31" z-index="2e-4" pointer-events="none" color-hex="FFFFFF">)", EME);
+		EME = m_DrawItems->Insert(LR"(<img id="button4" src="Button" left="10" top="196" width="149" height="31" z-index="1e-4" mousedown="button4">)", EM);
+		m_DrawItems->Insert(LR"(<a id="text" text="위화도 회군" left="0" top="0" width="149" height="31" z-index="2e-4" pointer-events="none" color-hex="FFFFFF">)", EME);
+
+		EME = m_DrawItems->Insert(LR"(<img id="button5" src="Button" left="10" top="227" width="149" height="31" z-index="1e-4" mousedown="button5">)", EM);
+		m_DrawItems->Insert(LR"(<a id="text" text="고려의 건국" left="0" top="0" width="149" height="31" z-index="2e-4" pointer-events="none" color-hex="FFFFFF">)", EME);
+
+
+
+		EME = m_DrawItems->Insert(LR"(<img id="button6" src="Button" left="10" top="258" width="149" height="31" z-index="1e-4" mousedown="button6">)", EM);
+		m_DrawItems->Insert(LR"(<a id="text" text="가야의 반란" left="0" top="0" width="149" height="31" z-index="2e-4" pointer-events="none" color-hex="FFFFFF">)", EME);
+
+		EME = m_DrawItems->Insert(LR"(<img id="button7" src="Button" left="10" top="289" width="149" height="31" z-index="1e-4" mousedown="button7">)", EM);
+		m_DrawItems->Insert(LR"(<a id="text" text="발해의 건국" left="0" top="0" width="149" height="31" z-index="2e-4" pointer-events="none" color-hex="FFFFFF">)", EME);
+
+		EME = m_DrawItems->Insert(LR"(<img id="button8" src="Button" left="10" top="320" width="149" height="31" z-index="1e-4" mousedown="button8">)", EM);
+		m_DrawItems->Insert(LR"(<a id="text" text="의병단의 봉기" left="0" top="0" width="149" height="31" z-index="2e-4" pointer-events="none" color-hex="FFFFFF">)", EME);
+
+		EME = m_DrawItems->Insert(LR"(<img id="button9" src="Button" left="10" top="351" width="149" height="31" z-index="1e-4" mousedown="button9">)", EM);
+		m_DrawItems->Insert(LR"(<a id="text" text="낙랑군의 부활" left="0" top="0" width="149" height="31" z-index="2e-4" pointer-events="none" color-hex="FFFFFF">)", EME);
+
+		EME = m_DrawItems->Insert(LR"(<img id="button10" src="Button" left="10" top="382" width="149" height="31" z-index="1e-4" mousedown="button10">)", EM);
+		m_DrawItems->Insert(LR"(<a id="text" text="-" left="0" top="0" width="149" height="31" z-index="2e-4" pointer-events="none" color-hex="FFFFFF" mousedown="button10">)", EME);
 		
-		EME = m_DrawItems->Insert(LR"(<img id="button5" src="Button" left="10" top="227" width="149" height="31" z-index="1e-4">)", EM);
-		m_DrawItems->Insert(LR"(<a id="text" text="6" left="0" top="0" width="149" height="31" z-index="2e-4" pointer-events="none" color-hex="FFFFFF">)", EME);
-		
-		m_DrawItems->Insert(LR"(<a id="tail" text="콘솔" left="33" top="264" width="101" height="20" z-index="1e-4" pointer-events="none" color-hex="FFFFFF">)", EM);
+		m_DrawItems->Insert(LR"(<a id="tail" text="콘솔" left="33" top="419" width="101" height="20" z-index="1e-4" pointer-events="none" color-hex="FFFFFF">)", EM);
 	}
 					
 
@@ -1677,7 +1786,10 @@ std::unordered_map<std::wstring, std::wstring> MyApp::Act(std::wstring func_name
 		if (arg.find(L"size") != arg.end()) draft_size = Long(arg[L"size"]);
 		if (arg.find(L"owner") != arg.end()) owner = std::stoull(arg[L"owner"]);
 		else if (auto N = m_gamedata->nations.find(prov->second->ruler); N != m_gamedata->nations.end())
+		{
 			owner = N->first;
+			N->second->abb_army_move;
+		}
 		if (arg.find(L"force") != arg.end()) force = true;
 		
 		if (prov->second->man >= draft_size || force)
@@ -1713,8 +1825,16 @@ std::unordered_map<std::wstring, std::wstring> MyApp::Act(std::wstring func_name
 				_Return.insert(std::make_pair(L"leaderid", Str(m_gamedata->leader_progress)));
 				auto L = m_gamedata->NewLeader(id, owner, draft_size);
 
+				if (auto N = m_gamedata->nations.find(prov->second->ruler); N != m_gamedata->nations.end())
+				{
+					L.abb_move = N->second->abb_army_move;
+					L.abb_sieze = N->second->abb_army_sieze;
+					L.abb_disp = N->second->abb_disp;
+				}
+
 				if (arg.find(L"abb_move") != arg.end()) L.abb_move = Float(arg[L"abb_move"]);
 				if (arg.find(L"abb_sieze") != arg.end()) L.abb_sieze = Float(arg[L"abb_sieze"]);
+				if (arg.find(L"abb_disp") != arg.end()) L.abb_disp = Float(arg[L"abb_disp"]);
 
 				m_gamedata->leaders.insert(std::make_pair(m_gamedata->leader_progress++, std::make_unique<Leader>(L)));
 
@@ -1975,6 +2095,107 @@ void MyApp::Execute(const std::wstring& func_name, const std::uint64_t& uuid)
 				UpdateArrow();
 				GUIUpdatePanelLeader(leader);
 			}
+		}
+
+		else if (func_name == L"button0") //Tang Invasion
+		{
+			NationId owner = 0;
+			for (auto& N : m_gamedata->nations) if (N.second->MainName == L"당나라") { owner = N.first; break; };
+
+			Act(L"Draft", { L"location", L"18", L"size", L"25000", L"owner", Str(owner), L"force", L"" });
+		}
+		else if (func_name == L"button1") //Magal Invasion
+		{
+			NationId owner = 0;
+			for (auto& N : m_gamedata->nations) if (N.second->MainName == L"말갈") { owner = N.first; break; };
+
+			draw_mutex.lock();
+			Act(L"Draft", { L"location", L"16", L"size", L"3500", L"owner", Str(owner), L"force", L"" }, false, false);
+			Act(L"Draft", { L"location", L"16", L"size", L"2500", L"owner", Str(owner), L"force", L"" }, false, false);
+			Act(L"Draft", { L"location", L"16", L"size", L"1500", L"owner", Str(owner), L"force", L"" }, false, false);
+			draw_mutex.unlock();
+		}
+		else if (func_name == L"button2") //We Invasion
+		{
+			NationId owner = 0;
+			for (auto& N : m_gamedata->nations) if (N.second->MainName == L"왜") { owner = N.first; break; };
+
+			draw_mutex.lock();
+			Act(L"Draft", { L"location", L"2", L"size", L"1100", L"owner", Str(owner), L"force", L"" }, false, false);
+			Act(L"Draft", { L"location", L"3", L"size", L"1100", L"owner", Str(owner), L"force", L"" }, false, false);
+			Act(L"Draft", { L"location", L"4", L"size", L"1100", L"owner", Str(owner), L"force", L"" }, false, false);
+			Act(L"Draft", { L"location", L"7", L"size", L"1100", L"owner", Str(owner), L"force", L"" }, false, false);
+			draw_mutex.unlock();
+		}
+		else if (func_name == L"button3") //Yuan Invasion
+		{
+			NationId owner = 0;
+			for (auto& N : m_gamedata->nations) if (N.second->MainName == L"원나라") { owner = N.first; break; };
+			draw_mutex.lock();
+			for (int i = 0; i < 3; i++)
+			{
+				Act(L"Draft", { L"location", L"18", L"size", L"12000", L"owner", Str(owner), L"force", L"", L"abb_sieze", L"4", L"abb_move", L"3" }, false, false);
+			}
+			draw_mutex.unlock();
+		}
+		else if (func_name == L"button4") //Joseon Revolt
+		{
+			NationId owner = 0;
+			for (auto& N : m_gamedata->nations) if (N.second->MainName == L"조선") { owner = N.first; break; };
+
+			Act(L"Draft", { L"location", L"12", L"size", L"13000", L"owner", Str(owner), L"force", L"", L"abb_sieze", L"2" });
+		}
+		else if (func_name == L"button5") //Goryeo Revolt
+		{
+			NationId owner = 0;
+			for (auto& N : m_gamedata->nations) if (N.second->MainName == L"고려") { owner = N.first; break; };
+
+			draw_mutex.lock();
+			for (int i = 0; i < 3; i++)
+			{
+				Act(L"Draft", { L"location", L"7", L"size", L"5000", L"owner", Str(owner), L"force", L"", L"abb_move", L"2" }, false, false);
+			}
+			draw_mutex.unlock();
+		}
+		else if (func_name == L"button6") //Gaya Revolt
+		{
+			NationId owner = 0;
+			for (auto& N : m_gamedata->nations) if (N.second->MainName == L"가야") { owner = N.first; break; };
+
+			Act(L"Draft", { L"location", L"3", L"size", L"4000", L"owner", Str(owner), L"force", L"" });
+		}
+		else if (func_name == L"button7") //Balhae Revolt
+		{
+			NationId owner = 0;
+			for (auto& N : m_gamedata->nations) if (N.second->MainName == L"발해") { owner = N.first; break; };
+
+			Act(L"Draft", { L"location", L"15", L"size", L"7000", L"owner", Str(owner), L"force", L"" });
+		}
+		else if (func_name == L"button8") //Balhae Revolt
+		{
+			NationId owner = 0;
+			for (auto& N : m_gamedata->nations) if (N.second->MainName == L"한국") { owner = N.first; break; };
+
+			Act(L"Draft", { L"location", L"2", L"size",  L"3333", L"owner", Str(owner), L"force", L"" });
+			Act(L"Draft", { L"location", L"3", L"size",  L"3333", L"owner", Str(owner), L"force", L"" });
+			Act(L"Draft", { L"location", L"4", L"size",  L"3333", L"owner", Str(owner), L"force", L"" });
+			Act(L"Draft", { L"location", L"5", L"size",  L"3333", L"owner", Str(owner), L"force", L"" });
+			Act(L"Draft", { L"location", L"6", L"size",  L"3333", L"owner", Str(owner), L"force", L"" });
+			Act(L"Draft", { L"location", L"7", L"size",  L"3333", L"owner", Str(owner), L"force", L"" });
+			Act(L"Draft", { L"location", L"8", L"size",  L"3333", L"owner", Str(owner), L"force", L"" });
+			Act(L"Draft", { L"location", L"9", L"size",  L"3333", L"owner", Str(owner), L"force", L"" });
+			Act(L"Draft", { L"location", L"10", L"size", L"3333", L"owner", Str(owner), L"force", L"" });
+			Act(L"Draft", { L"location", L"11", L"size", L"3333", L"owner", Str(owner), L"force", L"" });
+			Act(L"Draft", { L"location", L"12", L"size", L"3333", L"owner", Str(owner), L"force", L"" });
+			Act(L"Draft", { L"location", L"13", L"size", L"3333", L"owner", Str(owner), L"force", L"" });
+			Act(L"Draft", { L"location", L"14", L"size", L"3333", L"owner", Str(owner), L"force", L"" });
+		}
+		else if (func_name == L"button9") //Balhae Revolt
+		{
+			NationId owner = 0;
+			for (auto& N : m_gamedata->nations) if (N.second->MainName == L"낙랑") { owner = N.first; break; };
+
+			Act(L"Draft", { L"location", L"9", L"size", L"30000", L"owner", Str(owner), L"force", L"" });
 		}
 	}
 }
@@ -3611,9 +3832,9 @@ void MyApp::BuildShadersAndInputLayout()
 
 void MyApp::BuildLandGeometry()
 {
-	std::ifstream file("Map/map.bmp");
+	std::ifstream file("Map/map.bmp", std::ios::binary);
 	std::wifstream prov_list("Map/prov.txt");
-	std::ifstream prov_file("Map/prov.bmp");
+	std::ifstream prov_file("Map/prov.bmp", std::ios::binary);
 	assert(file && prov_file && prov_list);
 	{
 		std::map<Color32, std::pair<ProvinceId, std::wstring>> prov_key;
@@ -3647,21 +3868,25 @@ void MyApp::BuildLandGeometry()
 		}
 
 		file.seekg(0, std::ios::end);
-		prov_file.seekg(0, std::ios::end);
 		std::streampos length = file.tellg();
 		file.seekg(0, std::ios::beg);
+
+		std::vector<unsigned char> buf(length);
+		file.read((char*)&buf[0], length);
+
+		file.close();
+
+		prov_file.seekg(0, std::ios::end);
+		length = prov_file.tellg();
 		prov_file.seekg(0, std::ios::beg);
 
-		OutputDebugStringA(("File Length : " + std::to_string(length) + "\n").c_str());
-
 		std::vector<unsigned char> prov_buf(length);
-		std::vector<unsigned char> buf(length);
-		//char* buf = (char*)std::malloc(sizeof (char) * length);
-		file.read((char*)&buf[0], length);
 		prov_file.read((char*)&prov_buf[0], length);
-		file.close();
 		prov_file.close();
 
+
+		OutputDebugStringA(("File Length : " + std::to_string(length) + "\n").c_str());
+		
 
 		//B-G-R
 
@@ -3682,7 +3907,7 @@ void MyApp::BuildLandGeometry()
 		XMVECTOR vMax = XMLoadFloat3(&vMaxf3);
 
 		Color32 ind;
-		unsigned char r, g, b;
+		unsigned int r, g, b;
 		float R0, G0, B0, R1, G1, B1, syc;
 		size_t addr, naddr;
 		Color32 dex, ndex;
@@ -3694,11 +3919,12 @@ void MyApp::BuildLandGeometry()
 			for (size_t x = 0; x < w; ++x) {
 				//OutputDebugStringA((std::to_string(x) + ", " + std::to_string(y) + "\n").c_str());
 				addr = 54 + (x + (y * w)) * 3;
-				r = (int)buf[addr + 0];
-				g = (int)buf[addr + 1];
-				b = (int)buf[addr + 2];
-				mLandVertices[x + y * w].Pos = { (x - (w - 1) / 2.f), (float)(r + g + b) / 128.0f - 1.5f, (y - (h - 1) / 2.f) };
-
+				r = buf[addr + 0];
+				g = buf[addr + 1];
+				b = buf[addr + 2];
+				
+				mLandVertices[x + y * w].Pos = { (x - (w - 1) / 2.f), (float)(r + g + b) / 127 - 1.5f, (y - (h - 1) / 2.f) };
+				
 
 				if (mLandVertices[x + y * w].Pos.y > 1.5f)
 				{
