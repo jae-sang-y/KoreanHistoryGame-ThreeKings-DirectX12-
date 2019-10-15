@@ -1,7 +1,7 @@
 # KoreanHistoryGame-ThreeKings(DirectX12)
 
 삼국시대 게임 입니다.
-이전의 [삼국시대 게임](github.com/apple01644/KoreanHistoryGame-ThreeKings)을 DirectX12를 사용해서 구현 했습니다.
+이전의 [삼국시대 게임](https://github.com/apple01644/KoreanHistoryGame-ThreeKings)을 DirectX12를 사용해서 구현 했습니다.
 마우스로 조작 가능합니다.
 가운데 마우스 플레이할 국가를 선택 가능합니다.
 
@@ -21,5 +21,5 @@
 
 
 ## 고마운 분
-[d3dcoder](github.com/d3dcoder) 
+[d3dcoder](https://github.com/d3dcoder) 
 이 분덕에 DirectX를 입문 할 수 있었습니다.
