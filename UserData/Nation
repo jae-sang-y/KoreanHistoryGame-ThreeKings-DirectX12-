@@ -18,7 +18,7 @@ PROVINCE	-id 16 -ruler 말갈 -owner 말갈 -develop 7;
 PROVINCE	-id 17 -ruler 고구려 -owner 고구려 -develop 18;
 PROVINCE	-id 18 -ruler 고구려 -owner 고구려 -develop 15;
 
-PROVINCE	-id 19 -ruler 당나라 -owner 당나라 -develop 17;
+PROVINCE	-id 19 -ruler 왜 -owner 왜 -develop 17;
 PROVINCE	-id 20 -ruler 당나라 -owner 당나라 -develop 11;
 PROVINCE	-id 21 -ruler 당나라 -owner 당나라 -develop 13;
 PROVINCE	-id 22 -ruler 당나라 -owner 당나라 -develop 15;

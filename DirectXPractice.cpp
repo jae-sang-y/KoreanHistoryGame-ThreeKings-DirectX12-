@@ -538,7 +538,7 @@ private:
 		bool isComment = false;
 
 		size_t pos;
-		std::vector<std::wstring> word;
+		std::list<std::wstring> word;
 		std::wstring index;
 
 		ProvinceId tag_prov;
@@ -748,7 +748,7 @@ void MyApp::MainGame() //!@
 						if (L != m_gamedata->leaders.end() && L->second->location == O.second->location && O.second->size > 0 && L->second->size > 0)
 						{
 							if (L->second->owner == m_gamedata->province.at(O.second->location)->owner) {
-								L->second->size -= O.second->size / 4 * 100 / 200;
+								L->second->size -= O.second->size / 4 * 170 / 200;
 							}
 							else {
 								L->second->size -= O.second->size / 4;
@@ -1451,7 +1451,9 @@ void MyApp::Query(const std::wstring& query)
 			else if (mQuery.isString)
 				mQuery.word.rbegin()->push_back(ch);
 			else if (ch == L'\t' || ch == L' ' || ch == L'\n' || ch == L'\r')
+			{
 				mQuery.word.push_back(L"");
+			}
 			else if (ch == L'/' && mQuery.pos + 1 < query.size())
 				if (query.at(mQuery.pos + 1) == L'/')
 				{
@@ -1469,8 +1471,12 @@ void MyApp::Query(const std::wstring& query)
 				mQuery.word.rbegin()->push_back(ch);
 		}
 
-		if (mQuery.word.size() > 0)
+		while (mQuery.word.size() > 0 && (*mQuery.word.cbegin() == L""))
 		{
+			mQuery.word.pop_front();
+		}
+		if (mQuery.word.size() > 0)
+		{			
 			mQuery.index = L"";
 			if (*mQuery.word.cbegin() == L"PROVINCE")
 			{
@@ -1527,7 +1533,7 @@ void MyApp::Query(const std::wstring& query)
 					}
 				}
 			}
-
+			
 		}
 		else
 		{
@@ -1998,11 +2004,11 @@ void MyApp::GUIUpdatePanelProvince(ProvinceId prov_id)
 		m_gamedata->last_prov_id = prov_id;
 	m_gamedata->last_leader_id = 0;
 
-	auto prov = m_gamedata->province.find(prov_id);
+	std::map<ProvinceId, std::unique_ptr<Province>>::iterator prov = m_gamedata->province.find(prov_id);
 	if (prov == m_gamedata->province.end())
 		return;
 
-	auto N = m_gamedata->nations.find(prov->second->owner);
+	const auto N = m_gamedata->nations.find(prov->second->owner);
 	std::wstring nation_name = N == m_gamedata->nations.end() ? L"모르는국기" : N->second->MainName;
 
 	m_DrawItems->$(L".myForm").css(
@@ -2076,8 +2082,10 @@ void MyApp::GUIUpdatePanelProvince(ProvinceId prov_id)
 void MyApp::Execute(const std::wstring& func_name, const std::uint64_t& uuid)
 {
 	
+	auto C = m_DrawItems->withUUID(uuid).content;
+	auto& O = *C.begin();
 
-	auto& O = *m_DrawItems->withUUID(uuid).content.begin();
+	if (O != m_DrawItems->data.end())
 	{
 		if (func_name == L"FormHold")
 		{
@@ -2529,14 +2537,15 @@ void MyApp::GameUpdate()
 	mMainPassCB.gProv[0] = { 0.f, 0.f, 0.f, 0.f };
 	mMainPassCB.gSubProv[0] = mMainPassCB.gProv[0];
 
-	if (captions.size() > 0)
+	mUser.DebugText = L"";
+	/*if (captions.size() > 0)
 	{
-		mUser.DebugText = L"";
+		
 		for (const auto& O : captions)
 		{
 			mUser.DebugText += O.first + L" : " + O.second + L"\n";
 		}
-	}
+	}*/
 
 	for (auto& O : m_DrawItems->data)
 	{
@@ -3854,7 +3863,7 @@ void MyApp::BuildShadersAndInputLayout()
 	};
 
 	mShaders["provincePS"] = d3dUtil::CompileShader(L"Shaders\\Province.hlsl", nullptr, "PS", "ps_5_0");
-	mShaders["provinceGS"] = d3dUtil::CompileShader(L"Shaders\\GeometryShader.hlsl", nullptr, "GS", "gs_5_0");
+	//mShaders["provinceGS"] = d3dUtil::CompileShader(L"Shaders\\GeometryShader.hlsl", nullptr, "GS", "gs_5_0");
 	mShaders["provinceVS"] = d3dUtil::CompileShader(L"Shaders\\Province.hlsl", nullptr, "VS", "vs_5_0");
 
 	mShaders["standardVS"] = d3dUtil::CompileShader(L"Shaders\\Default.hlsl", nullptr, "VS", "vs_5_0");
@@ -4448,10 +4457,10 @@ void MyApp::BuildPSOs()
 		reinterpret_cast<BYTE*>(mShaders["provincePS"]->GetBufferPointer()),
 		mShaders["provincePS"]->GetBufferSize()
 	};
-	ProvincePsoDesc.GS = {
+	/*ProvincePsoDesc.GS = {
 		reinterpret_cast<BYTE*>(mShaders["provinceGS"]->GetBufferPointer()),
 		mShaders["provinceGS"]->GetBufferSize()
-	};
+	};*/
 	ProvincePsoDesc.VS =
 	{
 		reinterpret_cast<BYTE*>(mShaders["provinceVS"]->GetBufferPointer()),
@@ -4467,7 +4476,7 @@ void MyApp::BuildFrameResources()
 	for (int i = 0; i < gNumFrameResources; ++i)
 	{
 		mFrameResources.push_back(std::make_unique<FrameResource>(md3dDevice.Get(),
-			1, (UINT)mAllRitems.size(), (UINT)mMaterials.size(), mWaves->VertexCount()));
+			1, (UINT)mAllRitems.size() * 2, (UINT)mMaterials.size(), mWaves->VertexCount()));
 	}
 }
 
@@ -4640,7 +4649,7 @@ void MyApp::BuildRenderItems()
 		mRitemLayer[(int)RenderLayer::Opaque].push_back(newboxRitem_u.get());
 		mAllRitems.push_back(std::move(newboxRitem_u));
 	}
-	{
+	/*{
 		auto newboxRitem = boxRitem;
 		auto newboxRitem_u = std::make_unique<RenderItem>(newboxRitem);
 
@@ -4651,7 +4660,7 @@ void MyApp::BuildRenderItems()
 
 		mRitemLayer[(int)RenderLayer::Opaque].push_back(newboxRitem_u.get());
 		mAllRitems.push_back(std::move(newboxRitem_u));
-	}
+	}*/
 
 
 	mAllRitems.push_back(std::move(wavesRitem));
