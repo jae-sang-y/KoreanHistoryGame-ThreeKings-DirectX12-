@@ -1709,6 +1709,77 @@ void MyApp::GameInit()
 		거란->MainColor = XMFLOAT4(0.5f, 0.0f, 0.3f, 0.75f);
 		거란->MainName = L"거란";
 		m_gamedata->nations[++nation_count] = std::move(거란);
+
+
+		std::unique_ptr<Nation> 두막루 = std::make_unique<Nation>();
+		두막루->MainColor = XMFLOAT4(0.3f, 0.4f, 0.7f, 0.75f);
+		두막루->MainName = L"두막루";
+		m_gamedata->nations[++nation_count] = std::move(두막루);
+
+
+		std::unique_ptr<Nation> 동부여 = std::make_unique<Nation>();
+		동부여->MainColor = XMFLOAT4(0.6f, 0.1f, 0.6f, 0.75f);
+		동부여->MainName = L"동부여";
+		m_gamedata->nations[++nation_count] = std::move(동부여);
+
+
+		std::unique_ptr<Nation> 부여 = std::make_unique<Nation>();
+		부여->MainColor = XMFLOAT4(0.7f, 0.2f, 0.7f, 0.75f);
+		부여->MainName = L"부여";
+		m_gamedata->nations[++nation_count] = std::move(부여);
+			   
+		std::unique_ptr<Nation> 예 = std::make_unique<Nation>();
+		예->MainColor = XMFLOAT4(0.4f, 0.1f, 0.1f, 0.75f);
+		예->MainName = L"예";
+		m_gamedata->nations[++nation_count] = std::move(예);
+
+		std::unique_ptr<Nation> 동예 = std::make_unique<Nation>();
+		동예->MainColor = XMFLOAT4(0.1f, 0.3f, 0.5f, 0.75f);
+		동예->MainName = L"동예";
+		m_gamedata->nations[++nation_count] = std::move(동예);
+
+
+		std::unique_ptr<Nation> 옥저 = std::make_unique<Nation>();
+		옥저->MainColor = XMFLOAT4(0.8f, 0.1f, 0.1f, 0.75f);
+		옥저->MainName = L"옥저";
+		m_gamedata->nations[++nation_count] = std::move(옥저);
+
+		std::unique_ptr<Nation> 태봉 = std::make_unique<Nation>();
+		태봉->MainColor = XMFLOAT4(0.8f, 0.8f, 0.3f, 0.75f);
+		태봉->MainName = L"태봉";
+		m_gamedata->nations[++nation_count] = std::move(태봉);
+
+		std::unique_ptr<Nation> 여진 = std::make_unique<Nation>();
+		여진->MainColor = XMFLOAT4(0.8f, 0.8f, 0.6f, 0.75f);
+		여진->MainName = L"여진";
+		m_gamedata->nations[++nation_count] = std::move(여진);
+
+
+		std::unique_ptr<Nation> 십제 = std::make_unique<Nation>();
+		십제->MainColor = XMFLOAT4(0.6f, 0.8f, 0.1f, 0.75f);
+		십제->MainName = L"십제";
+		m_gamedata->nations[++nation_count] = std::move(십제);
+
+		std::unique_ptr<Nation> 마한 = std::make_unique<Nation>();
+		마한->MainColor = XMFLOAT4(0.1f, 0.2f, 0.9f, 0.75f);
+		마한->MainName = L"마한";
+		m_gamedata->nations[++nation_count] = std::move(마한);
+
+
+		std::unique_ptr<Nation> 진한 = std::make_unique<Nation>();
+		진한->MainColor = XMFLOAT4(1.0f, 0.5f, 0.5f, 0.75f);
+		진한->MainName = L"진한";
+		m_gamedata->nations[++nation_count] = std::move(진한);
+
+		std::unique_ptr<Nation> 변한 = std::make_unique<Nation>();
+		변한->MainColor = XMFLOAT4(0.2f, 0.2f, 0.2f, 0.75f);
+		변한->MainName = L"변한";
+		m_gamedata->nations[++nation_count] = std::move(변한);
+		
+		std::unique_ptr<Nation> 홍건적 = std::make_unique<Nation>();
+		홍건적->MainColor = XMFLOAT4(0.5f, 0.0f, 0.0f, 0.75f);
+		홍건적->MainName = L"홍건적";
+		m_gamedata->nations[++nation_count] = std::move(홍건적);
 	}
 	//m_gamedata->nations.at(mUser.nationPick)->Ai = false;
 
@@ -1778,7 +1849,7 @@ void MyApp::GameInit()
 		m_DrawItems->Insert(LR"(<a id="text" text="위화도 회군" left="0" top="0" width="149" height="31" z-index="2e-4" pointer-events="none" color-hex="FFFFFF">)", EME);
 
 		EME = m_DrawItems->Insert(LR"(<img id="button5" src="Button" left="10" top="227" width="149" height="31" z-index="1e-4" mousedown="button5">)", EM);
-		m_DrawItems->Insert(LR"(<a id="text" text="고려의 건국" left="0" top="0" width="149" height="31" z-index="2e-4" pointer-events="none" color-hex="FFFFFF">)", EME);
+		m_DrawItems->Insert(LR"(<a id="text" text="고려의 등장" left="0" top="0" width="149" height="31" z-index="2e-4" pointer-events="none" color-hex="FFFFFF">)", EME);
 
 
 
@@ -1795,7 +1866,7 @@ void MyApp::GameInit()
 		m_DrawItems->Insert(LR"(<a id="text" text="낙랑군의 부활" left="0" top="0" width="149" height="31" z-index="2e-4" pointer-events="none" color-hex="FFFFFF">)", EME);
 
 		EME = m_DrawItems->Insert(LR"(<img id="button10" src="Button" left="10" top="382" width="149" height="31" z-index="1e-4" mousedown="button10">)", EM);
-		m_DrawItems->Insert(LR"(<a id="text" text="-" left="0" top="0" width="149" height="31" z-index="2e-4" pointer-events="none" color-hex="FFFFFF" mousedown="button10">)", EME);
+		m_DrawItems->Insert(LR"(<a id="text" text="난세의 개막" left="0" top="0" width="149" height="31" z-index="2e-4" pointer-events="none" color-hex="FFFFFF" mousedown="button10">)", EME);
 		
 		m_DrawItems->Insert(LR"(<a id="tail" text="콘솔" left="33" top="419" width="101" height="20" z-index="1e-4" pointer-events="none" color-hex="FFFFFF">)", EM);
 	}
@@ -2157,7 +2228,8 @@ void MyApp::Execute(const std::wstring& func_name, const std::uint64_t& uuid)
 			NationId owner = 0;
 			for (auto& N : m_gamedata->nations) if (N.second->MainName == L"당나라") { owner = N.first; break; };
 
-			Act(L"Draft", { L"location", L"18", L"size", L"25000", L"owner", Str(owner), L"force", L"" });
+			Act(L"Draft", { L"location", L"20", L"size", L"25000", L"owner", Str(owner), L"force", L"" });
+			Act(L"Draft", { L"location", L"21", L"size", L"25000", L"owner", Str(owner), L"force", L"" });
 		}
 		else if (func_name == L"button1") //Magal Invasion
 		{
@@ -2176,6 +2248,7 @@ void MyApp::Execute(const std::wstring& func_name, const std::uint64_t& uuid)
 			for (auto& N : m_gamedata->nations) if (N.second->MainName == L"왜") { owner = N.first; break; };
 
 			draw_mutex.lock();
+			Act(L"Draft", { L"location", L"19", L"size", L"11000", L"owner", Str(owner), L"force", L"" }, false, false);
 			Act(L"Draft", { L"location", L"2", L"size", L"1100", L"owner", Str(owner), L"force", L"" }, false, false);
 			Act(L"Draft", { L"location", L"3", L"size", L"1100", L"owner", Str(owner), L"force", L"" }, false, false);
 			Act(L"Draft", { L"location", L"4", L"size", L"1100", L"owner", Str(owner), L"force", L"" }, false, false);
@@ -2189,7 +2262,7 @@ void MyApp::Execute(const std::wstring& func_name, const std::uint64_t& uuid)
 			draw_mutex.lock();
 			for (int i = 0; i < 3; i++)
 			{
-				Act(L"Draft", { L"location", L"18", L"size", L"12000", L"owner", Str(owner), L"force", L"", L"abb_sieze", L"4", L"abb_move", L"3" }, false, false);
+				Act(L"Draft", { L"location", L"26", L"size", L"12000", L"owner", Str(owner), L"force", L"", L"abb_sieze", L"4", L"abb_move", L"3" }, false, false);
 			}
 			draw_mutex.unlock();
 		}
@@ -2198,7 +2271,7 @@ void MyApp::Execute(const std::wstring& func_name, const std::uint64_t& uuid)
 			NationId owner = 0;
 			for (auto& N : m_gamedata->nations) if (N.second->MainName == L"조선") { owner = N.first; break; };
 
-			Act(L"Draft", { L"location", L"12", L"size", L"13000", L"owner", Str(owner), L"force", L"", L"abb_sieze", L"2" });
+			Act(L"Draft", { L"location", L"12", L"size", L"33000", L"owner", Str(owner), L"force", L"", L"abb_sieze", L"2" });
 		}
 		else if (func_name == L"button5") //Goryeo Revolt
 		{
@@ -2208,7 +2281,7 @@ void MyApp::Execute(const std::wstring& func_name, const std::uint64_t& uuid)
 			draw_mutex.lock();
 			for (int i = 0; i < 3; i++)
 			{
-				Act(L"Draft", { L"location", L"7", L"size", L"5000", L"owner", Str(owner), L"force", L"", L"abb_move", L"2" }, false, false);
+				Act(L"Draft", { L"location", L"7", L"size", L"15000", L"owner", Str(owner), L"force", L"", L"abb_move", L"2" }, false, false);
 			}
 			draw_mutex.unlock();
 		}
@@ -2217,33 +2290,35 @@ void MyApp::Execute(const std::wstring& func_name, const std::uint64_t& uuid)
 			NationId owner = 0;
 			for (auto& N : m_gamedata->nations) if (N.second->MainName == L"가야") { owner = N.first; break; };
 
-			Act(L"Draft", { L"location", L"3", L"size", L"4000", L"owner", Str(owner), L"force", L"" });
+			Act(L"Draft", { L"location", L"3", L"size", L"7000", L"owner", Str(owner), L"force", L"" });
 		}
 		else if (func_name == L"button7") //Balhae Revolt
 		{
 			NationId owner = 0;
 			for (auto& N : m_gamedata->nations) if (N.second->MainName == L"발해") { owner = N.first; break; };
 
-			Act(L"Draft", { L"location", L"15", L"size", L"7000", L"owner", Str(owner), L"force", L"" });
+			Act(L"Draft", { L"location", L"15", L"size", L"14000", L"owner", Str(owner), L"force", L"" });
 		}
 		else if (func_name == L"button8") //Balhae Revolt
 		{
 			NationId owner = 0;
 			for (auto& N : m_gamedata->nations) if (N.second->MainName == L"한국") { owner = N.first; break; };
 
-			Act(L"Draft", { L"location", L"2", L"size",  L"3333", L"owner", Str(owner), L"force", L"" });
-			Act(L"Draft", { L"location", L"3", L"size",  L"3333", L"owner", Str(owner), L"force", L"" });
-			Act(L"Draft", { L"location", L"4", L"size",  L"3333", L"owner", Str(owner), L"force", L"" });
-			Act(L"Draft", { L"location", L"5", L"size",  L"3333", L"owner", Str(owner), L"force", L"" });
-			Act(L"Draft", { L"location", L"6", L"size",  L"3333", L"owner", Str(owner), L"force", L"" });
-			Act(L"Draft", { L"location", L"7", L"size",  L"3333", L"owner", Str(owner), L"force", L"" });
-			Act(L"Draft", { L"location", L"8", L"size",  L"3333", L"owner", Str(owner), L"force", L"" });
-			Act(L"Draft", { L"location", L"9", L"size",  L"3333", L"owner", Str(owner), L"force", L"" });
-			Act(L"Draft", { L"location", L"10", L"size", L"3333", L"owner", Str(owner), L"force", L"" });
-			Act(L"Draft", { L"location", L"11", L"size", L"3333", L"owner", Str(owner), L"force", L"" });
-			Act(L"Draft", { L"location", L"12", L"size", L"3333", L"owner", Str(owner), L"force", L"" });
-			Act(L"Draft", { L"location", L"13", L"size", L"3333", L"owner", Str(owner), L"force", L"" });
-			Act(L"Draft", { L"location", L"14", L"size", L"3333", L"owner", Str(owner), L"force", L"" });
+			draw_mutex.lock();
+			Act(L"Draft", { L"location", L"2", L"size",  L"3333", L"owner", Str(owner), L"force", L"" }, false, false);
+			Act(L"Draft", { L"location", L"3", L"size",  L"3333", L"owner", Str(owner), L"force", L"" }, false, false);
+			Act(L"Draft", { L"location", L"4", L"size",  L"3333", L"owner", Str(owner), L"force", L"" }, false, false);
+			Act(L"Draft", { L"location", L"5", L"size",  L"3333", L"owner", Str(owner), L"force", L"" }, false, false);
+			Act(L"Draft", { L"location", L"6", L"size",  L"3333", L"owner", Str(owner), L"force", L"" }, false, false);
+			Act(L"Draft", { L"location", L"7", L"size",  L"3333", L"owner", Str(owner), L"force", L"" }, false, false);
+			Act(L"Draft", { L"location", L"8", L"size",  L"3333", L"owner", Str(owner), L"force", L"" }, false, false);
+			Act(L"Draft", { L"location", L"9", L"size",  L"3333", L"owner", Str(owner), L"force", L"" }, false, false);
+			Act(L"Draft", { L"location", L"10", L"size", L"3333", L"owner", Str(owner), L"force", L"" }, false, false);
+			Act(L"Draft", { L"location", L"11", L"size", L"3333", L"owner", Str(owner), L"force", L"" }, false, false);
+			Act(L"Draft", { L"location", L"12", L"size", L"3333", L"owner", Str(owner), L"force", L"" }, false, false);
+			Act(L"Draft", { L"location", L"13", L"size", L"3333", L"owner", Str(owner), L"force", L"" }, false, false);
+			Act(L"Draft", { L"location", L"14", L"size", L"3333", L"owner", Str(owner), L"force", L"" }, false, false);
+			draw_mutex.unlock();
 		}
 		else if (func_name == L"button9") //Balhae Revolt
 		{
@@ -2251,6 +2326,65 @@ void MyApp::Execute(const std::wstring& func_name, const std::uint64_t& uuid)
 			for (auto& N : m_gamedata->nations) if (N.second->MainName == L"낙랑") { owner = N.first; break; };
 
 			Act(L"Draft", { L"location", L"9", L"size", L"30000", L"owner", Str(owner), L"force", L"" });
+		}
+		else if (func_name == L"button10") //State Age
+		{
+			draw_mutex.lock();
+			NationId owner = 0;
+			for (auto& N : m_gamedata->nations) if (N.second->MainName == L"거란") { owner = N.first; break; };
+			Act(L"Draft", { L"location", L"25", L"size", L"30000", L"owner", Str(owner), L"force", L"" }, false, false);
+
+			for (auto& N : m_gamedata->nations) if (N.second->MainName == L"두막루") { owner = N.first; break; };
+			Act(L"Draft", { L"location", L"17", L"size", L"9000", L"owner", Str(owner), L"force", L"" }, false, false);
+
+			for (auto& N : m_gamedata->nations) if (N.second->MainName == L"동부여") { owner = N.first; break; };
+			Act(L"Draft", { L"location", L"15", L"size", L"10000", L"owner", Str(owner), L"force", L"" }, false, false);
+
+			for (auto& N : m_gamedata->nations) if (N.second->MainName == L"부여") { owner = N.first; break; };
+			Act(L"Draft", { L"location", L"18", L"size", L"18000", L"owner", Str(owner), L"force", L"" }, false, false);
+
+			for (auto& N : m_gamedata->nations) if (N.second->MainName == L"고구려") { owner = N.first; break; };
+			Act(L"Draft", { L"location", L"13", L"size", L"16000", L"owner", Str(owner), L"force", L"" }, false, false);
+
+			for (auto& N : m_gamedata->nations) if (N.second->MainName == L"예") { owner = N.first; break; };
+			Act(L"Draft", { L"location", L"12", L"size", L"8000", L"owner", Str(owner), L"force", L"" }, false, false);
+
+			for (auto& N : m_gamedata->nations) if (N.second->MainName == L"여진") { owner = N.first; break; };
+			Act(L"Draft", { L"location", L"14", L"size", L"9000", L"owner", Str(owner), L"force", L"" }, false, false);
+
+			for (auto& N : m_gamedata->nations) if (N.second->MainName == L"태봉") { owner = N.first; break; };
+			Act(L"Draft", { L"location", L"10", L"size", L"20000", L"owner", Str(owner), L"force", L"" }, false, false);
+
+			for (auto& N : m_gamedata->nations) if (N.second->MainName == L"옥저") { owner = N.first; break; };
+			Act(L"Draft", { L"location", L"11", L"size", L"10000", L"owner", Str(owner), L"force", L"" }, false, false);
+
+			for (auto& N : m_gamedata->nations) if (N.second->MainName == L"동예") { owner = N.first; break; };
+			Act(L"Draft", { L"location", L"7", L"size", L"10000", L"owner", Str(owner), L"force", L"" }, false, false);
+
+			for (auto& N : m_gamedata->nations) if (N.second->MainName == L"십제") { owner = N.first; break; };
+			Act(L"Draft", { L"location", L"9", L"size", L"12000", L"owner", Str(owner), L"force", L"" }, false, false);
+
+			for (auto& N : m_gamedata->nations) if (N.second->MainName == L"백제") { owner = N.first; break; };
+			Act(L"Draft", { L"location", L"5", L"size", L"32000", L"owner", Str(owner), L"force", L"" }, false, false);
+
+			for (auto& N : m_gamedata->nations) if (N.second->MainName == L"마한") { owner = N.first; break; };
+			Act(L"Draft", { L"location", L"2", L"size", L"13000", L"owner", Str(owner), L"for홍ce", L"" }, false, false);
+
+			for (auto& N : m_gamedata->nations) if (N.second->MainName == L"진한") { owner = N.first; break; };
+			Act(L"Draft", { L"location", L"4", L"size", L"11000", L"owner", Str(owner), L"force", L"" }, false, false);
+
+			for (auto& N : m_gamedata->nations) if (N.second->MainName == L"변한") { owner = N.first; break; };
+			Act(L"Draft", { L"location", L"3", L"size", L"9000", L"owner", Str(owner), L"force", L"" }, false, false);
+
+			for (auto& N : m_gamedata->nations) if (N.second->MainName == L"탐라") { owner = N.first; break; };
+			Act(L"Draft", { L"location", L"1", L"size", L"8000", L"owner", Str(owner), L"force", L"" }, false, false);
+
+			for (auto& N : m_gamedata->nations) if (N.second->MainName == L"홍건적") { owner = N.first; break; };
+			Act(L"Draft", { L"location", L"22", L"size", L"60000", L"owner", Str(owner), L"force", L"" }, false, false);
+			Act(L"Draft", { L"location", L"22", L"size", L"60000", L"owner", Str(owner), L"force", L"" }, false, false);
+			Act(L"Draft", { L"location", L"22", L"size", L"60000", L"owner", Str(owner), L"force", L"" }, false, false);
+			Act(L"Draft", { L"location", L"22", L"size", L"60000", L"owner", Str(owner), L"force", L"" }, false, false);
+			draw_mutex.unlock();
 		}
 	}
 }
@@ -2884,94 +3018,7 @@ void MyApp::OnKeyDown(WPARAM btnState)
 		{
 			mEyeMoveZ -= pressShift ? 0.48f : 0.24f * mRadius * deltaTime;
 		}
-		else if (keyState.at('1')) //Tang Invasion
-		{
-			NationId owner = 0;
-			for (auto& N : m_gamedata->nations) if (N.second->MainName == L"당나라") { owner = N.first; break; };
-
-			Act(L"Draft", { L"location", L"18", L"size", L"25000", L"owner", Str(owner), L"force", L"" });
-		}
-		else if (keyState.at('2')) //Magal Invasion
-		{
-			NationId owner = 0;
-			for (auto& N : m_gamedata->nations) if (N.second->MainName == L"말갈") { owner = N.first; break; };
-
-			draw_mutex.lock();
-			Act(L"Draft", { L"location", L"16", L"size", L"3500", L"owner", Str(owner), L"force", L"" }, false, false);
-			Act(L"Draft", { L"location", L"16", L"size", L"2500", L"owner", Str(owner), L"force", L"" }, false, false);
-			Act(L"Draft", { L"location", L"16", L"size", L"1500", L"owner", Str(owner), L"force", L"" }, false, false);
-			draw_mutex.unlock();
-		}
-		else if (keyState.at('3')) //We Invasion
-		{
-			NationId owner = 0;
-			for (auto& N : m_gamedata->nations) if (N.second->MainName == L"왜") { owner = N.first; break; };
-
-			draw_mutex.lock();
-			Act(L"Draft", { L"location", L"2", L"size", L"900", L"owner", Str(owner), L"force", L"" }, false, false);
-			Act(L"Draft", { L"location", L"3", L"size", L"900", L"owner", Str(owner), L"force", L"" }, false, false);
-			Act(L"Draft", { L"location", L"4", L"size", L"900", L"owner", Str(owner), L"force", L"" }, false, false);
-			Act(L"Draft", { L"location", L"7", L"size", L"900", L"owner", Str(owner), L"force", L"" }, false, false);
-			draw_mutex.unlock();
-		}
-		else if (keyState.at('4')) //Yuan Invasion
-		{
-			NationId owner = 0;
-			for (auto& N : m_gamedata->nations) if (N.second->MainName == L"원나라") { owner = N.first; break; };
-			draw_mutex.lock();
-			for (int i = 0; i < 3; i++)
-			{
-				Act(L"Draft", { L"location", L"18", L"size", L"12000", L"owner", Str(owner), L"force", L"", L"abb_sieze", L"4", L"abb_move", L"5" }, false, false);
-			}
-			draw_mutex.unlock();
-		}
-		else if (keyState.at('5')) //Joseon Revolt
-		{
-			NationId owner = 0;
-			for (auto& N : m_gamedata->nations) if (N.second->MainName == L"조선") { owner = N.first; break; };
-
-			Act(L"Draft", { L"location", L"12", L"size", L"13000", L"owner", Str(owner), L"force", L"" });
-		}
-		else if (keyState.at('6')) //Goryeo Revolt
-		{
-			NationId owner = 0;
-			for (auto& N : m_gamedata->nations) if (N.second->MainName == L"고려") { owner = N.first; break; };
-
-			draw_mutex.lock();
-			for (int i = 0; i < 3; i++)
-			{
-				Act(L"Draft", { L"location", L"7", L"size", L"5000", L"owner", Str(owner), L"force", L"" }, false, false);
-			}
-			draw_mutex.unlock();
-		}
-		else if (keyState.at('7')) //Gaya Revolt
-		{
-			NationId owner = 0;
-			for (auto& N : m_gamedata->nations) if (N.second->MainName == L"가야") { owner = N.first; break; };
-
-			Act(L"Draft", { L"location", L"3", L"size", L"4000", L"owner", Str(owner), L"force", L"" });
-		}
-		else if (keyState.at('8')) //Balhae Revolt
-		{
-			NationId owner = 0;
-			for (auto& N : m_gamedata->nations) if (N.second->MainName == L"발해") { owner = N.first; break; };
-
-			Act(L"Draft", { L"location", L"15", L"size", L"7000", L"owner", Str(owner), L"force", L"" });
-		}
-		else if (keyState.at('9')) //Balhae Revolt
-		{
-			NationId owner = 0;
-			for (auto& N : m_gamedata->nations) if (N.second->MainName == L"한국") { owner = N.first; break; };
-
-			Act(L"Draft", { L"location", L"8", L"size", L"8000", L"owner", Str(owner), L"force", L"" });
-		}
-		else if (keyState.at('0')) //Balhae Revolt
-		{
-			NationId owner = 0;
-			for (auto& N : m_gamedata->nations) if (N.second->MainName == L"낙랑") { owner = N.first; break; };
-
-			Act(L"Draft", { L"location", L"9", L"size", L"20000", L"owner", Str(owner), L"force", L"" });
-		}
+		
 		break;
 	}
 
