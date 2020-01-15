@@ -136,6 +136,7 @@ struct Nation
 
 	size_t own_province = 0;
 	size_t rule_province = 0;
+	size_t own_leaders = 0;
 
 	NationId rival = -1;
 };
@@ -610,6 +611,7 @@ void MyApp::MainGame() //!@
 		{
 			N.second->own_province = 0;
 			N.second->rule_province = 0;
+			N.second->own_leaders = 0;
 		}
 		for (auto& O : m_gamedata->province)
 		{
@@ -629,16 +631,20 @@ void MyApp::MainGame() //!@
 				{
 					O.second->man += (int64_t)round(min(max((O.second->maxman - O.second->man) / 1200.0 * N->second->abb_man, -10), 10));
 				}
+				else if (O.second->hp < O.second->p_num / 5 && O.second->man > 6000)
+				{
+					Act(L"Draft", { L"location", Str(O.first), L"size", Str(O.second->man), L"owner", Str(O.second->owner) });
+				}
 			}
 
-			if (auto & N = m_gamedata->nations.find(O.second->owner); N != m_gamedata->nations.end()) ++N->second->own_province;
-			if (auto & N = m_gamedata->nations.find(O.second->ruler); N != m_gamedata->nations.end()) ++N->second->rule_province;
+			if (auto& N = m_gamedata->nations.find(O.second->owner); N != m_gamedata->nations.end()) ++N->second->own_province;
+			if (auto& N = m_gamedata->nations.find(O.second->ruler); N != m_gamedata->nations.end()) ++N->second->rule_province;
 			
 
 			if (O.second->hp < 0) O.second->hp = 0;
-			else if (O.second->hp >= 1000)
+			else if (O.second->hp >= O.second->p_num)
 			{
-				O.second->hp = 1000;
+				O.second->hp = O.second->p_num;
 				O.second->owner = O.second->ruler;
 			}
 			else O.second->hp += 1;
@@ -667,6 +673,10 @@ void MyApp::MainGame() //!@
 				for (const auto& E : m_DrawItems->$(L"#leader" + Str(O->first))) m_DrawItems->data.erase(E);
 				m_gamedata->leaders.erase((O--)->first);
 			}
+			else
+			{
+				if (auto& N = m_gamedata->nations.find(O->second->owner); N != m_gamedata->nations.end()) ++N->second->own_leaders;
+			}
 		}
 		draw_mutex.unlock();
 
@@ -687,18 +697,23 @@ void MyApp::MainGame() //!@
 			}
 			else 
 			{
-				if (auto& P = m_gamedata->province.at(O.second->location); O.second->cmd.size() == 0)
+				if (auto& P = m_gamedata->province.at(O.second->location); true)
 				{
-					//if (O.second->size < 2992)
+					if (P->owner == P->ruler)
 					{
-						if (P->man >= 9 && O.second->owner == m_gamedata->province.at(O.second->location)->owner)
+						if (O.second->owner == P->owner)
 						{
-							O.second->size += 9;
-							P->man -= 9;
+							for (int i = 1; i < 100 && i * i * 9 <= P->man; ++i)
+							{
+								O.second->size += 9 * i * i;
+								P->man -= 9 * i * i;
+							}
 						}
-						if (P->hp < 1000) P->hp += 1;
 					}
-
+					else if (P->ruler == O.second->owner)
+					{
+						if (P->hp < P->p_num) P->hp += 1;
+					}
 				}
 			}
 			if (O.second->cmd.size() > 0)
@@ -715,21 +730,30 @@ void MyApp::MainGame() //!@
 						O.second->location = B->target_prov;
 						break;
 					case CommandType::Sieze:
-						m_gamedata->province.at(O.second->location)->hp -= (77 + rand() % 100 + O.second->size / 600) * 2;
-						//O.second->size = (int)(0.9 * O.second->size);
-						if (m_gamedata->province.at(O.second->location)->hp <= 0)
 						{
-							m_gamedata->province.at(O.second->location)->ruler = O.second->owner;
-							O.second->size += m_gamedata->province.at(O.second->location)->man;
-							m_gamedata->province.at(O.second->location)->man = 0;
-							m_gamedata->province.at(O.second->location)->hp = 0;
+							auto& P = m_gamedata->province.at(O.second->location);
+							P->hp -= (77 + rand() % 100 + O.second->size / 600) * 2;
+							//O.second->size = (int)(0.9 * O.second->size);
+							if (P->hp <= 0)
+							{
+								P->ruler = O.second->owner;
+								//O.second->size += m_gamedata->province.at(O.second->location)->man;
+								//m_gamedata->province.at(O.second->location)->man = 0;
+								P->hp = 0;
+							}
 						}
 						break;
 					case CommandType::Attack:
 						auto L = m_gamedata->leaders.find(std::move(B->target_leader));
 						if (L != m_gamedata->leaders.end() && L->second->location == O.second->location && O.second->size > 0 && L->second->size > 0)
 						{
-							L->second->size -= O.second->size / 4;
+							if (L->second->owner == m_gamedata->province.at(O.second->location)->owner) {
+								L->second->size -= O.second->size / 4 * 100 / 200;
+							}
+							else {
+								L->second->size -= O.second->size / 4;
+							}
+							
 							if (L->second->size > 0)
 							{
 								O.second->size -= L->second->size / 4;
@@ -1491,6 +1515,14 @@ void MyApp::Query(const std::wstring& query)
 								}
 							}
 						}
+						else if (mQuery.index == L"-develop")
+						{
+							if (mQuery.tag_prov_it != m_gamedata->province.end())
+							{
+								mQuery.tag_prov_it->second->maxman = (4 + powf(Int(O) / 2.f, 2)) * 1000;
+								mQuery.tag_prov_it->second->man = mQuery.tag_prov_it->second->maxman / 10;
+							}
+						}
 
 					}
 				}
@@ -1661,6 +1693,16 @@ void MyApp::GameInit()
 		³«¶û->MainColor = XMFLOAT4(1.f, 0.6f, 0.0625f, 0.75f);
 		³«¶û->MainName = L"³«¶û";
 		m_gamedata->nations[++nation_count] = std::move(³«¶û);
+
+		std::unique_ptr<Nation> Å½¶ó = std::make_unique<Nation>();
+		Å½¶ó->MainColor = XMFLOAT4(0.9f, 0.3f, 0.9f, 0.75f);
+		Å½¶ó->MainName = L"Å½¶ó";
+		m_gamedata->nations[++nation_count] = std::move(Å½¶ó);
+
+		std::unique_ptr<Nation> °Å¶õ = std::make_unique<Nation>();
+		°Å¶õ->MainColor = XMFLOAT4(0.5f, 0.0f, 0.3f, 0.75f);
+		°Å¶õ->MainName = L"°Å¶õ";
+		m_gamedata->nations[++nation_count] = std::move(°Å¶õ);
 	}
 	//m_gamedata->nations.at(mUser.nationPick)->Ai = false;
 
@@ -1698,6 +1740,7 @@ void MyApp::GameInit()
 		m_DrawItems->Insert(LR"(<a id="text0" text="Window" left="0" top="-8" width="160" height="40" z-index="1e-4" border="disable" color-g="0" color-r="0"  color-b="0">)", EME);
 		m_DrawItems->Insert(LR"(<a id="text1" text="Window" left="0" top="36" width="160" height="24" z-index="1e-4" border="disable" color-g="0" color-r="0"  color-b="0">)", EME);
 		m_DrawItems->Insert(LR"(<a id="text2" text="Window" left="0" top="64" width="160" height="24" z-index="1e-4" border="disable" color-g="0" color-r="0"  color-b="0">)", EME);
+		m_DrawItems->Insert(LR"(<a id="text3" text="Window" left="0" top="92" width="160" height="24" z-index="1e-4" border="disable" color-g="0" color-r="0"  color-b="0">)", EME);
 
 		std::uint64_t EMEE = m_DrawItems->Insert(LR"(<div id="buttonbar" src="Window" left="26" top="292" width="174" height="20" z-index="1e-4">)", EM);
 		std::uint64_t EMBT = m_DrawItems->Insert(LR"(<img id="button0" src="Button" left="2" top="0" width="112" height="40" z-index="1e-4">)", EMEE);
@@ -1976,7 +2019,11 @@ void MyApp::GUIUpdatePanelProvince(ProvinceId prov_id)
 		});
 	m_DrawItems->$(L".myForm #textContainer text2").css(
 		{
-			L"text", L"¿¹ºñ±º : " + Str(prov->second->man) + L"/" + Str(prov->second->maxman)
+			L"text", L"¿¹ºñ±º : " + Str(prov->second->man)
+		});
+	m_DrawItems->$(L".myForm #textContainer text3").css(
+		{
+			L"text", L"/" + Str(prov->second->maxman)
 		});
 	m_DrawItems->$(L".myForm #head").css(
 		{
@@ -1988,7 +2035,7 @@ void MyApp::GUIUpdatePanelProvince(ProvinceId prov_id)
 		});
 	m_DrawItems->$(L".myForm #textContainer text1").css(
 		{
-			L"text", L"¼º ³»±¸µµ : " + Str(prov->second->hp)
+			L"text", L"HP " + Str(prov->second->hp) + L" / " + Str(prov->second->p_num)
 		});
 	if (auto X = Act(L"Draft", {L"location", Str(prov->first)}, true); X.find(L"SUCCESS") != X.end() && (prov->second->ruler == mUser.nationPick || mUser.nationPick == 0))
 	{
@@ -3951,12 +3998,15 @@ void MyApp::BuildLandGeometry()
 						nx = x + W[i][0];
 						ny = y + W[i][0];
 						naddr = 54 + (nx + (ny * w)) * 3;
-						ndex = rgb2dex(prov_buf.at(naddr + 2), prov_buf.at(naddr + 1), prov_buf.at(naddr));
-						if (nx < w && ny < h && dex != ndex)
+						if (nx < w && ny < h)
 						{
-							if (auto nsearch = prov_key.find(ndex); nsearch != prov_key.end())
+							ndex = rgb2dex(prov_buf.at(naddr + 2), prov_buf.at(naddr + 1), prov_buf.at(naddr));
+							if (dex != ndex)
 							{
-								m_gamedata->province_connect.insert(std::make_pair(std::make_pair(search->second.first, nsearch->second.first), FLT_MAX));
+								if (auto nsearch = prov_key.find(ndex); nsearch != prov_key.end())
+								{
+									m_gamedata->province_connect.insert(std::make_pair(std::make_pair(search->second.first, nsearch->second.first), FLT_MAX));
+								}
 							}
 						}
 					}
